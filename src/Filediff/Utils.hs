@@ -1,25 +1,33 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
+-- | Helper functions not to be exposed by `Filediff`
 module Filediff.Utils
 ( -- * list operations
-  longestCommonSubsequence
+  removeAtIndices
+, longestCommonSubsequence
 , subsequenceIndices
 , nonSubsequenceIndices
 ) where
 
 import Data.List ((\\))
 
+import Data.MemoCombinators.Class (MemoTable, table)
 import qualified Data.MemoCombinators as Memo
 
 import Filediff.Types
 
 -- optimization: hash lines
-longestCommonSubsequence :: [Line] -> [Line] -> [Line]
+-- | Compute the longest common (potentially noncontiguous) subsequence
+-- | between two sequences. Element type is fixed because memoization
+-- | requires a static type.
+longestCommonSubsequence :: forall a. (MemoTable a, Eq a) => [a] -> [a] -> [a]
 longestCommonSubsequence
     = Memo.memo2
-        (Memo.list $ Memo.list Memo.char)
-        (Memo.list $ Memo.list Memo.char)
+        (Memo.list table)
+        (Memo.list table)
         longestCommonSubsequence'
     where
-        longestCommonSubsequence' :: [Line] -> [Line] -> [Line]
+        longestCommonSubsequence' :: [a] -> [a] -> [a]
         longestCommonSubsequence' [] _ = []
         longestCommonSubsequence' _ [] = []
         longestCommonSubsequence' (x:xs) (y:ys) =
@@ -29,10 +37,10 @@ longestCommonSubsequence
                     then caseX
                     else caseY
             where
-                caseX :: [Line]
+                caseX :: [a]
                 caseX = longestCommonSubsequence xs (y:ys)
 
-                caseY :: [Line]
+                caseY :: [a]
                 caseY = longestCommonSubsequence (x:xs) ys
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
@@ -56,3 +64,15 @@ subsequenceIndices sub@(a:sub') super@(b:super') =
 nonSubsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
 nonSubsequenceIndices sub super =
     [0..(length super - 1)] \\ (subsequenceIndices sub super)
+
+-- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
+-- | and indices must all exist
+removeAtIndices :: [Int] -> [a] -> [a]
+removeAtIndices = removeAtIndices' 0
+    where
+        removeAtIndices' :: Int -> [Int] -> [a] -> [a]
+        removeAtIndices' _ [] xs = xs
+        removeAtIndices' curr (i:is) (x:xs) =
+            if curr == i
+                then     removeAtIndices' (succ curr) is xs
+                else x : removeAtIndices' (succ curr) (i:is) xs

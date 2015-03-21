@@ -56,8 +56,8 @@ runTest t = do
                 formatChar ':' = '-'
                 formatChar ch = ch
 
-testDiffAlgorithm :: Assertion
-testDiffAlgorithm = do
+testDiff :: Assertion
+testDiff = do
     let oldContents = "a\nb\nc\nd\ne\nf\ng"
     let newContents = "w\na\nb\nx\ny\nz\ne"
 
@@ -71,13 +71,35 @@ testDiffAlgorithm = do
     IO.hPutStr handle newContents
     IO.hClose handle
 
-    (F.diffFiles "OLD" "NEW") >>= (@?=) (FTypes.Diff [2,3,5,6] [(0,"w"),(3,"x"),(4,"y"),(5,"z")])
+    (F.diffFiles "OLD" "NEW") >>= (@?=) (FTypes.Diff "OLD" [2,3,5,6] [(0,"w"),(3,"x"),(4,"y"),(5,"z")])
+
+testApply :: Assertion
+testApply = do
+    let oldContents = "a\nb\nc\nd\ne\nf\ng"
+    let newContents = "w\na\nb\nx\ny\nz\ne"
+
+    let addedFile = "OLD"
+    handle <- IO.openFile addedFile IO.WriteMode
+    IO.hPutStr handle oldContents
+    IO.hClose handle
+
+    let addedFile = "NEW"
+    handle <- IO.openFile addedFile IO.WriteMode
+    IO.hPutStr handle newContents
+    IO.hClose handle
+
+    diff <- F.diffFiles "OLD" "NEW"
+    applied <- F.apply diff "OLD"
+    applied @?= (lines newContents)
 
 tests :: TestTree
 tests = testGroup "unit tests"
     [ testCase
         "Testing diffing algorithm"
-        (runTest testDiffAlgorithm) ]
+        (runTest testDiff) 
+    , testCase
+        "Testing patching algorithm"
+        (runTest testApply) ]
 
 main :: IO ()
 main = defaultMain tests

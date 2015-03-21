@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- | The module exposing the functionality of this package
 module Filediff
 ( -- * basic operations
   diffFiles
@@ -20,11 +21,11 @@ import Control.Monad.IO.Class (liftIO)
 -- Filediff imports
 
 import Filediff.Types
-import Filediff.Utils(longestCommonSubsequence, nonSubsequenceIndices)
+import Filediff.Utils(longestCommonSubsequence, nonSubsequenceIndices, removeAtIndices)
 
 -- * helper functions
 
--- | Compute the difference between the two files (more
+-- | /O(mn)/. Compute the difference between the two files (more
 -- | specifically, the minimal number of changes to make to transform the
 -- | file residing at the location specified by the first
 -- | parameter into the second). Returns a fail state if either or both of
@@ -36,7 +37,7 @@ diffFiles f1 f2 = do
     let common = longestCommonSubsequence f1lines f2lines
     let toDel = nonSubsequenceIndices common f1lines
     let toAdd = getProgressiveIndicesToAdd common f2lines
-    return $ Diff toDel toAdd
+    return $ Diff { targetFile = f1, dels = toDel, adds = toAdd }
     where
         -- | λ add
         -- | [(0,"w"),(3,"x"),(4,"y")]
@@ -46,7 +47,6 @@ diffFiles f1 f2 = do
         getProgressiveIndicesToAdd sub super =
             map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
 
-
 -- | Compute the difference between the two directories (more
 -- | specifically, the minimal number of changes to make to transform the
 -- | directory residing at the location specified by the first
@@ -55,9 +55,13 @@ diffFiles f1 f2 = do
 diffDirectories :: FilePath -> FilePath -> IO Diff
 diffDirectories d1 d2 = error "not yet implemented"
 
--- | Apply a diff to a directory or file
-apply :: Diff -> FilePath -> EitherT Error IO ()
-apply d filepath = error "not yet implemented"
+-- | /O(n)/. Apply a diff to a directory or file
+apply :: Diff -> FilePath -> IO [Line]--EitherT Error IO ()
+apply (Diff targetFile dels adds) filepath = do
+    fileLines <- lines <$> readFile filepath
+    let lcs = removeAtIndices dels fileLines
+    let added = insertAtProgressiveIndices adds lcs
+    return added
     where
         -- | Best explained by example:
         -- |
