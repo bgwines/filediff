@@ -28,6 +28,9 @@ import Control.Monad.IO.Class (liftIO)
 
 import Data.Either.Combinators (isLeft, fromLeft)
 
+import qualified Filediff as F
+import qualified Filediff.Types as FTypes
+
 -- | Runs a test in its own empty directory.
 -- | Effectively, it isolates it from all other tests.
 runTest :: Assertion -> Assertion
@@ -54,7 +57,21 @@ runTest t = do
                 formatChar ch = ch
 
 testDiffAlgorithm :: Assertion
-testDiffAlgorithm = True @?= True
+testDiffAlgorithm = do
+    let oldContents = "a\nb\nc\nd\ne\nf\ng"
+    let newContents = "w\na\nb\nx\ny\nz\ne"
+
+    let addedFile = "OLD"
+    handle <- IO.openFile addedFile IO.WriteMode
+    IO.hPutStr handle oldContents
+    IO.hClose handle
+
+    let addedFile = "NEW"
+    handle <- IO.openFile addedFile IO.WriteMode
+    IO.hPutStr handle newContents
+    IO.hClose handle
+
+    (F.diffFiles "OLD" "NEW") >>= (@?=) (FTypes.Diff [2,3,5,6] [(0,"w"),(3,"x"),(4,"y"),(5,"z")])
 
 tests :: TestTree
 tests = testGroup "unit tests"

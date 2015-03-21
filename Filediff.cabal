@@ -5,6 +5,7 @@ name:                Filediff
 version:             0.1.0.0
 synopsis:            Diff and patch module
 -- description:         
+homepage:            https://github.com/bgwines/filediff
 license:             BSD3
 license-file:        LICENSE
 author:              Brett Wines
@@ -12,19 +13,19 @@ maintainer:          brettwines@gmail.com
 -- copyright:           
 category:            Data
 build-type:          Simple
--- extra-source-files:
+extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  -- exposed-modules: Filediff     
-  -- other-modules:
+  exposed-modules: Filediff, Filediff.Types
+  other-modules:   Filediff.Utils
   -- other-extensions:
-  build-depends:       base >=4.7 && <4.8, mtl, time, directory, either, transformers
+  build-depends:       base >=4.7 && <4.8, mtl, time, directory, either, transformers, data-memocombinators, tasty, tasty-hunit
   hs-source-dirs:      src
   default-language:    Haskell2010
 
 test-suite test-filediff
     type:       exitcode-stdio-1.0
     main-is:    Tests/test-filediff.hs
-    build-depends: base >=4.7 && <4.8, tasty, tasty-hunit, mtl, time, directory, either, transformers
+    build-depends: base >=4.7 && <4.8, tasty, tasty-hunit, mtl, time, directory, either, transformers, Filediff
     default-language:    Haskell2010
