@@ -76,7 +76,7 @@ testFileDiff = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [2,3,5,6] [(0,"w"),(3,"x"),(4,"y"),(5,"z")])
-    (F.diff "BASE" "COMP") >>= (flip (@?=)) (Just $ FTypes.Diff "." "." [expectedFilediff] [])
+    (F.diff "BASE" "COMP") >>= (flip (@?=)) (Just $ FTypes.Diff [expectedFilediff])
 
 testNonexistentFileDiff1 :: Assertion
 testNonexistentFileDiff1 = do
@@ -144,34 +144,19 @@ testDirDiff = do
 
     actualDiff <- F.diffDirectories "a" "b"
     let expectedDiff = FTypes.Diff {
-          FTypes.baseDir = "a"
-        , FTypes.compDir = "b"
-        , FTypes.filediffs = []
-        , FTypes.dirdiffs =
-            [ FTypes.Diff
-                { FTypes.baseDir = "a/common/"
-                , FTypes.compDir = "b/common/"
-                , FTypes.filediffs = [ FTypes.Filediff
-                    { FTypes.base = "a/common/x"
-                    , FTypes.comp = "b/common/x"
-                    , FTypes.linediff = (SeqDiff [1] [(1,"b")]) } ]
-                , FTypes.dirdiffs = [] }
-            , FTypes.Diff
-                { FTypes.baseDir = "a/aonly/"
-                , FTypes.compDir = "b/aonly/"
-                , FTypes.filediffs = [ FTypes.Filediff
-                    { FTypes.base = "a/aonly/afile"
-                    , FTypes.comp = "b/aonly/afile"
-                    , FTypes.linediff = (SeqDiff [0,1,2] []) } ]
-                , FTypes.dirdiffs = [] }
-            , FTypes.Diff
-                { FTypes.baseDir = "a/bonly/"
-                , FTypes.compDir = "b/bonly/"
-                , FTypes.filediffs = [ FTypes.Filediff
-                    { FTypes.base = "a/bonly/bfile"
-                    , FTypes.comp = "b/bonly/bfile"
-                    , FTypes.linediff = (SeqDiff [] [(0,"b"),(1,"b"),(2,"b")]) } ]
-                , FTypes.dirdiffs = [] } ]
+        FTypes.filediffs =
+            [ FTypes.Filediff
+                { FTypes.base = "common/x"
+                , FTypes.comp = "common/x"
+                , FTypes.linediff = (SeqDiff [1] [(1,"b")]) }
+            , FTypes.Filediff
+                    { FTypes.base = "aonly/afile"
+                    , FTypes.comp = "aonly/afile"
+                    , FTypes.linediff = (SeqDiff [0,1,2] []) }
+            , FTypes.Filediff
+                { FTypes.base = "bonly/bfile"
+                , FTypes.comp = "bonly/bfile"
+                , FTypes.linediff = (SeqDiff [] [(0,"b"),(1,"b"),(2,"b")]) } ]
         }
     actualDiff @?= expectedDiff
 
@@ -187,14 +172,14 @@ testDirDiffNoFiles = do
     D.createDirectory "b/bonly"
 
     actualDiff <- F.diffDirectories "a" "b"
-    let expectedDiff = FTypes.Diff "a" "b" [] []
+    let expectedDiff = FTypes.Diff []
     actualDiff @?= expectedDiff
 
 testIdentityDirDiff :: Assertion
 testIdentityDirDiff = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
 
-    let expectedDiff = FTypes.Diff "." "." [] []
+    let expectedDiff = FTypes.Diff []
     (F.diffDirectories "." ".") >>= (flip (@?=)) expectedDiff
 
 testDiffFileAndDir :: Assertion
@@ -215,11 +200,25 @@ testDirApply :: Assertion
 testDirApply = do
     1 @?= 1
 
+-- composition tests
+
 testSequenceDiffComposition :: Assertion
 testSequenceDiffComposition = do
     let a = ["a","b","c","d","e","f","g"]
     let b = ["w","a","b","x","y","z","e"]
     let c = ["#","x","#","#","y","e"]
+
+    let ab = FSeq.diffSequences a b
+    let bc = FSeq.diffSequences b c
+    let ac = FSeq.diffSequences a c
+
+    ab `mappend` bc @?= ac
+
+testSequenceDiffCompositionEdgeCase1 :: Assertion
+testSequenceDiffCompositionEdgeCase1 = do
+    let a = ""
+    let b = "bbb"
+    let c = ""
 
     let ab = FSeq.diffSequences a b
     let bc = FSeq.diffSequences b c
@@ -239,9 +238,39 @@ testFileDiffComposition = do
 
     ab `mappend` bc @?= ac
 
+testDirectoryDiffComposition :: Assertion
+testDirectoryDiffComposition = do
+    D.createDirectory "a"
+    D.createDirectory "b"
+    D.createDirectory "c"
+
+    D.createDirectory "a/common"
+    D.createDirectory "b/common"
+    D.createDirectory "c/common"
+
+    D.createDirectory "a/aonly"
+    D.createDirectory "b/bonly"
+    D.createDirectory "c/conly"
+
+    createFileWithContents "a/common/file" "a\nb\nc\nd\ne\nf\ng"
+    createFileWithContents "b/common/file" "w\na\nb\nx\ny\nz\ne"
+    createFileWithContents "c/common/file" "#\nx\n#\n#\ny\ne"
+
+    createFileWithContents "a/aonly/afile" "a\na\na"
+    createFileWithContents "b/bonly/bfile" "b\nb\nb"
+    createFileWithContents "c/conly/cfile" "c\nc\nc"
+
+    ab <- F.diffDirectories "a" "b"
+    bc <- F.diffDirectories "b" "c"
+    ac <- F.diffDirectories "a" "c"
+
+    ab `mappend` bc @?= ac
+
 tests :: TestTree
 tests = testGroup "unit tests"
-    [ testCase
+    [ -- diffing
+      --    files
+      testCase
         "Testing diffing individual files"
         (runTest testFileDiff)
     , testCase
@@ -257,32 +286,44 @@ tests = testGroup "unit tests"
         "Testing diffing individual files (nonexistent file case 3)"
         (runTest testNonexistentFileDiff3)
     , testCase
-        "Testing patching individual files"
-        (runTest testFileApply)
-    , testCase
         "Testing diffing failure for directories vs. files"
         (runTest testDiffDirAndFile)
     , testCase
         "Testing diffing failure for files vs. directories"
         (runTest testDiffFileAndDir)
+    --     directories
     , testCase
         "Testing diffing the same directory (identity diff)"
         (runTest testIdentityDirDiff)
     , testCase
-        "Testing sequence diffing composition"
-        (testSequenceDiffComposition)
+        "Testing diffing for directories without files in them"
+        (runTest testDirDiffNoFiles)
     , testCase
-        "Testing file diffing composition"
-        (testFileDiffComposition)
-    --, testCase
-    --    "Testing diffing algorithm for directories without files in them"
-    --    (runTest testDirDiffNoFiles)
-    --, testCase
-    --    "Testing diffing algorithm for directories"
-    --    (runTest testDirDiff)
+        "Testing diffing for directories"
+        (runTest testDirDiff)
+
+    -- patching
+    , testCase
+        "Testing patching individual files"
+        (runTest testFileApply)
     --, testCase
     --    "Testing patching algorithm for directories"
     --    (runTest testDirApply)
+
+    -- alg
+    --     composition
+    , testCase
+        "Testing sequence diffing composition"
+        (testSequenceDiffComposition)
+    , testCase
+        "Testing sequence diffing composition (an edge case)"
+        (testSequenceDiffCompositionEdgeCase1)
+    , testCase
+        "Testing file diffing composition"
+        (runTest testFileDiffComposition)
+    , testCase
+        "Testing directory diffing composition"
+        (runTest testDirectoryDiffComposition)
     ]
 
 main :: IO ()

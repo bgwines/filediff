@@ -29,7 +29,12 @@ import Control.Monad.IO.Class (liftIO)
 
 import Filediff.Types
 import Filediff.Sequence (SeqDiff(..), diffSequences, applySequenceDiff)
-import Filediff.Utils ((</>), getFileDirectory)
+import Filediff.Utils
+    ( (</>)
+    , getFileDirectory
+    , removeDotDirs
+    , dropUntil
+    , removeFirstPathComponent )
 
 -- * basic operations
 
@@ -66,12 +71,7 @@ diff a b = do
         fileCase :: IO (Maybe Diff)
         fileCase = do
                 filediff <- diffFiles a b
-                return $ Just Diff {
-                    baseDir = getFileDirectory a,
-                    compDir = getFileDirectory b,
-                    filediffs = [filediff],
-                    dirdiffs = []
-                }
+                return $ Just $ Diff [filediff]
 
         dirCase :: IO (Maybe Diff)
         dirCase = Just <$> (diffDirectories a b)
@@ -116,41 +116,57 @@ diffDirectories a b = do
     bIsFile <- D.doesFileExist b
     when (aIsFile || bIsFile) $ error $ "One or both of " ++ a ++ " and " ++ b ++ "is not a directory, but a file."
 
-    aContents <- getDirectoryContentsSafely a
-    bContents <- getDirectoryContentsSafely b
+    aContents <- getDirectoryContentsRecursiveSafe a
+    bContents <- getDirectoryContentsRecursiveSafe b
 
-    contentsDiffs <- getDiffs $ intersect aContents bContents
+    intersectionDiffs <- getDiffs $ intersect aContents bContents
 
     aOnlyDiffs <- getDiffs $ aContents \\ bContents
 
     bOnlyDiffs <- getDiffs $ bContents \\ aContents
 
+    let allDiffs = map removeFirstPathComponentFromDiff $ intersectionDiffs ++ aOnlyDiffs ++ bOnlyDiffs
 
-    let allDiffs = contentsDiffs ++ aOnlyDiffs ++ bOnlyDiffs
-    --putStrLn $ "allDiffs: " ++ (show allDiffs) ++ "\n"
-    if null allDiffs
-        then return $ Diff a b [] []
-        else return
-            . foldl1 (|.|)
-            $ allDiffs
+    return $ Diff allDiffs
     where
         -- | `x` is the prefix of the "base" of the diff; `y` is the
         -- | "compare".
-        getDiffs :: [FilePath] -> IO [Diff]
+        getDiffs :: [FilePath] -> IO [Filediff]
         getDiffs filepaths
-            = filter (not . any ((==) mempty . linediff) . filediffs)
-            <$> catMaybes
-            <$> mapM (\fp -> diff (a </> fp) (b </> fp)) filepaths
+            = filter (not . isIdentityFileDiff)
+            <$> mapM (\fp -> diffFiles (a </> fp) (b </> fp)) filepaths
 
-        getDirectoryContentsSafely :: FilePath -> IO [FilePath]
-        getDirectoryContentsSafely filepath = do
-            exists <- D.doesDirectoryExist filepath
-            if exists
-                then removeDotDirs <$> D.getDirectoryContents filepath
-                else return []
+        isIdentityFileDiff :: Filediff -> Bool
+        isIdentityFileDiff (Filediff _ _ seqdiff) = seqdiff == mempty
 
-        removeDotDirs :: [FilePath] -> [FilePath]
-        removeDotDirs = flip (\\) $ [".", ".."]
+        removeFirstPathComponentFromDiff :: Filediff -> Filediff
+        removeFirstPathComponentFromDiff (Filediff base comp seqdiff)
+            = Filediff
+                (removeFirstPathComponent base)
+                (removeFirstPathComponent comp)
+                seqdiff
+
+-- returns relative to `directory`
+getDirectoryContentsRecursiveSafe :: FilePath -> IO [FilePath]
+getDirectoryContentsRecursiveSafe directory = do
+    contents <- getDirectoryContentsRecursiveSafe' directory
+    return . map removeFirstPathComponent $ contents
+
+getDirectoryContentsRecursiveSafe' :: FilePath -> IO [FilePath]
+getDirectoryContentsRecursiveSafe' directory = do
+    exists <- D.doesDirectoryExist directory
+    if not exists
+        then return []
+        else do
+            relativeContents <- removeDotDirs <$> D.getDirectoryContents directory
+            let contents = map ((</>) directory) relativeContents
+
+            files <- filterM D.doesFileExist contents
+            directories <- filterM D.doesDirectoryExist contents
+
+            recFiles <- concat <$> mapM getDirectoryContentsRecursiveSafe' directories
+
+            return $ files ++ recFiles
 
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()

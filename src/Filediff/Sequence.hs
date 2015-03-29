@@ -65,7 +65,9 @@ instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
             -- will not be all if the last elem of `a` is
             -- not deleted, but doesn't make a difference
             survivingAIndices :: [Int]
-            survivingAIndices = [0..(maximum abDels)] \\ abDels
+            survivingAIndices = if null abDels
+                then []
+                else [0..(maximum abDels)] \\ abDels
 
             -- TODO: WEIRD. not using `forall a.` but still needs to be `b`?
             -- Given elements and their indices as [(Int, b)] as the only
@@ -103,7 +105,7 @@ instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
 -- | returns (to delete, to add)
 -- |
 -- |     > diffSequences "abcdefg" "wabxyze"
--- |     ([2,3,5,6],[(0,'w'),(3,'x'),(4,'y'),(5,'z')])
+-- |     SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
 diffSequences :: forall a. (Eq a, MemoTable a) => [a] -> [a] -> SeqDiff a
 diffSequences a b = SeqDiff
     (nonSubsequenceIndices common a)
@@ -120,6 +122,11 @@ diffSequences a b = SeqDiff
         getProgressiveIndicesToAdd sub super =
             map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
 
+-- |     > diffSequences "abcdefg" "wabxyze"
+-- |     SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+-- |
+-- |     > applySequenceDiff it "abcdefg"
+-- |     "wabxyze"
 applySequenceDiff :: forall a. (Eq a) => SeqDiff a -> [a] -> [a]
 applySequenceDiff (SeqDiff dels adds)
     = insertAtProgressiveIndices adds . removeAtIndices dels

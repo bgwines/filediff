@@ -5,7 +5,14 @@ module Filediff.Utils
 ( -- * directory operations
   (</>)
 , getFileDirectory
+, removeDotDirs
+, removeFirstPathComponent
+
+-- * list operations
+, dropUntil
 ) where
+
+import Data.List ((\\))
 
 -- | Concatenates two filepaths, for example:
 -- |
@@ -35,3 +42,26 @@ getFileDirectory filepath
     . dropWhile ((/=) '/')
     . reverse
     $ filepath
+
+-- | Takes a list of filepaths, and removes "." and ".." from it.
+removeDotDirs :: [FilePath] -> [FilePath]
+removeDotDirs = flip (\\) $ [".", ".."]
+
+-- TODO: safe tail?
+-- | Removes the oldest ancestor from a path component, e.g.
+-- |
+-- |     > removeFirstPathComponent "a/b/c"
+-- |     "b/c"
+removeFirstPathComponent :: FilePath -> FilePath
+removeFirstPathComponent = tail . dropUntil ((==) '/')
+
+-- * list operations
+
+-- | Drops elements from the given list until the predicate function
+-- | returns `True` (returned list includes element that passes test)
+dropUntil :: (a -> Bool) -> [a] -> [a]
+dropUntil _ [] = []
+dropUntil f (x:xs) =
+    if f x
+        then (x:xs)
+        else dropUntil f xs
