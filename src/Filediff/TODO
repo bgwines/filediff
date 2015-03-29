@@ -1,0 +1,7 @@
+TODO
+
+optimize: http://cm.bell-labs.com/cm/cs/cstr/41.pdf
+
+    return . fromJust $ foldl1 (|..|) filediffs
+    (point-free multiple args)
+

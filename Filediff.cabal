@@ -17,10 +17,10 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules: Filediff, Filediff.Types
+  exposed-modules: Filediff, Filediff.Types, Filediff.Sequence
   other-modules:   Filediff.Utils
   -- other-extensions:
-  build-depends:       base >=4.7 && <4.8, mtl, time, directory, either, transformers, data-memocombinators, tasty, tasty-hunit
+  build-depends:       base >=4.7 && <4.8, mtl, time, directory, either, transformers, data-memocombinators, tasty, tasty-hunit, Zora >=1.1.22
   hs-source-dirs:      src
   default-language:    Haskell2010
 
