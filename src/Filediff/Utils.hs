@@ -2,17 +2,24 @@
 
 -- | Helper functions not to be exposed by `Filediff`
 module Filediff.Utils
-( -- * directory operations
+( -- * filesystem operations
   (</>)
 , getFileDirectory
 , removeDotDirs
 , removeFirstPathComponent
+, getDirectoryContentsRecursiveSafe
 
 -- * list operations
 , dropUntil
 ) where
 
 import Data.List ((\\))
+
+import Control.Monad
+import Control.Applicative
+
+import qualified System.IO as IO
+import qualified System.Directory as D
 
 -- | Concatenates two filepaths, for example:
 -- |
@@ -37,7 +44,7 @@ a </> b = a ++ "/" ++ b
 -- |     "."
 getFileDirectory :: FilePath -> FilePath
 getFileDirectory filepath
-    = (?:) ((/=) "") "." -- get current directory, relative to repo root? yeah...
+    = (?:) ((/=) "") "."
     . reverse
     . dropWhile ((/=) '/')
     . reverse
@@ -54,6 +61,28 @@ removeDotDirs = flip (\\) $ [".", ".."]
 -- |     "b/c"
 removeFirstPathComponent :: FilePath -> FilePath
 removeFirstPathComponent = tail . dropUntil ((==) '/')
+
+-- returns relative to `directory`
+getDirectoryContentsRecursiveSafe :: FilePath -> IO [FilePath]
+getDirectoryContentsRecursiveSafe directory = do
+    contents <- getDirectoryContentsRecursiveSafe' directory
+    return . map removeFirstPathComponent $ contents
+
+getDirectoryContentsRecursiveSafe' :: FilePath -> IO [FilePath]
+getDirectoryContentsRecursiveSafe' directory = do
+    exists <- D.doesDirectoryExist directory
+    if not exists
+        then return []
+        else do
+            relativeContents <- removeDotDirs <$> D.getDirectoryContents directory
+            let contents = map ((</>) directory) relativeContents
+
+            files <- filterM D.doesFileExist contents
+            directories <- filterM D.doesDirectoryExist contents
+
+            recFiles <- concat <$> mapM getDirectoryContentsRecursiveSafe' directories
+
+            return $ files ++ recFiles
 
 -- * list operations
 

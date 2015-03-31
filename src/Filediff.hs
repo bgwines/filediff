@@ -4,10 +4,10 @@
 -- | The module exposing the functionality of this package
 module Filediff
 ( -- * basic operations
-  diff
-, diffFiles
+  diffFiles
 , diffDirectories
 , applyToFile
+, applyToDirectory
 ) where
 
 import qualified System.Directory as D
@@ -18,7 +18,7 @@ import Data.Maybe (isJust, fromJust, catMaybes)
 
 import Data.List ((\\), intersect)
 
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative
 
 import Control.Monad
 import Data.Monoid
@@ -34,53 +34,10 @@ import Filediff.Utils
     , getFileDirectory
     , removeDotDirs
     , dropUntil
-    , removeFirstPathComponent )
+    , removeFirstPathComponent 
+    , getDirectoryContentsRecursiveSafe )
 
 -- * basic operations
-
--- | /O(mn)/. Compute the difference between the two files or directories
--- | (more specifically, the minimal number of changes to make to
--- | transform the file or directory residing at the location specified by
--- | the first parameter into the second). Returns a fail state if the
--- | parameters do not both point to a file or both to a directory.
-diff :: FilePath -> FilePath -> IO (Maybe Diff)
-diff a b = do
-    aIsFile <- D.doesFileExist a
-    bIsFile <- D.doesFileExist b
-
-    aIsDirectory <- D.doesDirectoryExist a
-    bIsDirectory <- D.doesDirectoryExist b
-
-    case ((aIsFile, bIsFile), (aIsDirectory, bIsDirectory)) of
-        ((True, True), (_, _)) -> fileCase
-        ((_, _), (True, True)) -> dirCase
-
-        ((True, False), (False, True)) -> inconsistentCase
-        ((False, True), (True, False)) -> inconsistentCase
-
-        ((True, False), (False, False)) -> fileCase
-        ((False, True), (False, False)) -> fileCase
-
-        ((False, False), (True, False)) -> dirCase
-        ((False, False), (False, True)) -> dirCase
-
-        ((False, False), (False, False)) -> neitherExistsCase
-
-        (_, _) -> error "Programming error: undefined (dir, file)-pair case"
-    where
-        fileCase :: IO (Maybe Diff)
-        fileCase = do
-                filediff <- diffFiles a b
-                return $ Just $ Diff [filediff]
-
-        dirCase :: IO (Maybe Diff)
-        dirCase = Just <$> (diffDirectories a b)
-
-        inconsistentCase :: IO (Maybe Diff)
-        inconsistentCase = return Nothing
-
-        neitherExistsCase :: IO (Maybe Diff)
-        neitherExistsCase = return Nothing
 
 -- | /O(mn)/. Compute the difference between the two files (more
 -- | specifically, the minimal number of changes to make to transform the
@@ -146,31 +103,12 @@ diffDirectories a b = do
                 (removeFirstPathComponent comp)
                 seqdiff
 
--- returns relative to `directory`
-getDirectoryContentsRecursiveSafe :: FilePath -> IO [FilePath]
-getDirectoryContentsRecursiveSafe directory = do
-    contents <- getDirectoryContentsRecursiveSafe' directory
-    return . map removeFirstPathComponent $ contents
-
-getDirectoryContentsRecursiveSafe' :: FilePath -> IO [FilePath]
-getDirectoryContentsRecursiveSafe' directory = do
-    exists <- D.doesDirectoryExist directory
-    if not exists
-        then return []
-        else do
-            relativeContents <- removeDotDirs <$> D.getDirectoryContents directory
-            let contents = map ((</>) directory) relativeContents
-
-            files <- filterM D.doesFileExist contents
-            directories <- filterM D.doesDirectoryExist contents
-
-            recFiles <- concat <$> mapM getDirectoryContentsRecursiveSafe' directories
-
-            return $ files ++ recFiles
-
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
 applyToFile (Filediff _ _ lineDiff) filepath = do
     result <- (applySequenceDiff lineDiff . lines) <$> readFile filepath
     --writeFile filepath (unlines result)
     return result
+
+applyToDirectory :: Diff -> FilePath -> IO ()
+applyToDirectory diff filepath = return ()
