@@ -110,5 +110,6 @@ applyToFile (Filediff _ _ lineDiff) filepath = do
     --writeFile filepath (unlines result)
     return result
 
-applyToDirectory :: Diff -> FilePath -> IO ()
-applyToDirectory diff filepath = return ()
+-- | `True` upon success; `False` upon failure
+applyToDirectory :: Diff -> FilePath -> IO Bool
+applyToDirectory (Diff filediffs) filepath = return True

@@ -60,13 +60,23 @@ removeDotDirs = flip (\\) $ [".", ".."]
 -- |     > removeFirstPathComponent "a/b/c"
 -- |     "b/c"
 removeFirstPathComponent :: FilePath -> FilePath
-removeFirstPathComponent = tail . dropUntil ((==) '/')
+removeFirstPathComponent path =
+    if null . filter ((==) '/') $ path
+         then error "path without '/' in it"
+         else tail . dropUntil ((==) '/') $ path
 
 -- returns relative to `directory`
 getDirectoryContentsRecursiveSafe :: FilePath -> IO [FilePath]
 getDirectoryContentsRecursiveSafe directory = do
     contents <- getDirectoryContentsRecursiveSafe' directory
-    return . map removeFirstPathComponent $ contents
+
+    let directoryWithTrailingSlash = if last directory == '/'
+        then directory
+        else directory </> ""
+    let numPathComponents = length . filter ((==) '/') $ directoryWithTrailingSlash
+    let removePathComponents = last . take (numPathComponents + 1) . iterate removeFirstPathComponent
+
+    return . map removePathComponents $ contents
 
 getDirectoryContentsRecursiveSafe' :: FilePath -> IO [FilePath]
 getDirectoryContentsRecursiveSafe' directory = do
