@@ -20,6 +20,9 @@ import Data.List ((\\), intersect)
 
 import Control.Applicative
 
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+
 import Control.Monad
 import Data.Monoid
 import Control.Monad.Trans.Either
@@ -54,8 +57,8 @@ diffFiles a b = do
 
     aExists <- D.doesFileExist a
     bExists <- D.doesFileExist b
-    aLines <- if aExists then lines <$> readFile a else return []
-    bLines <- if bExists then lines <$> readFile b else return []
+    aLines <- if aExists then T.lines <$> TIO.readFile a else return []
+    bLines <- if bExists then T.lines <$> TIO.readFile b else return []
     let linediff = diffSequences aLines bLines
     return Filediff
         { base = a
@@ -94,7 +97,7 @@ diffDirectories a b = do
             <$> mapM (\fp -> diffFiles (a </> fp) (b </> fp)) filepaths
 
         isIdentityFileDiff :: Filediff -> Bool
-        isIdentityFileDiff (Filediff _ _ seqdiff) = seqdiff == mempty
+        isIdentityFileDiff = (==) mempty . linediff
 
         removeFirstPathComponentFromDiff :: Filediff -> Filediff
         removeFirstPathComponentFromDiff (Filediff base comp seqdiff)
@@ -106,8 +109,11 @@ diffDirectories a b = do
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
 applyToFile (Filediff _ _ lineDiff) filepath = do
-    result <- (applySequenceDiff lineDiff . lines) <$> readFile filepath
-    --writeFile filepath (unlines result)
+    -- Data.Text.IO.readFile is strict, which is what we
+    -- need, here (because of the write right after)
+    fileContents <- TIO.readFile filepath 
+    let result = (applySequenceDiff lineDiff . T.lines) fileContents
+    TIO.writeFile filepath (T.unlines result)
     return result
 
 -- | `True` upon success; `False` upon failure

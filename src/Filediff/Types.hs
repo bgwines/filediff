@@ -8,7 +8,7 @@ module Filediff.Types
 , Error
 ) where
 
-import Debug.Trace
+import qualified Data.Text as T
 
 import Data.List (intersect, sortBy)
 
@@ -16,6 +16,9 @@ import Data.Monoid
 import Control.Applicative
 
 import Filediff.Sequence (SeqDiff(..))
+
+import Data.MemoCombinators (Memo, wrap)
+import Data.MemoCombinators.Class (MemoTable, table, memoize)
 
 -- | The basic data type for a difference between two files. The
 -- | `FilePath` is the "base" file in the base-comp comparison, and
@@ -58,6 +61,10 @@ instance Eq Diff where
                 then base a `compare` base b
                 else comp a `compare` comp b
 
+instance MemoTable T.Text where
+    --       :: (ByteString -> r) -> ByteString -> r
+    -- table :: Memo ByteString
+    table = wrap T.pack T.unpack table
 
 instance Monoid Diff where
     mempty :: Diff
@@ -99,7 +106,7 @@ intersectBy f a b
     $ (\x y -> (x,y)) <$> a <*> b
 
 -- | Data type for a line
-type Line = String
+type Line = T.Text
 
 -- | Basic error type
 type Error = String

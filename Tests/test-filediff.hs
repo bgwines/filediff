@@ -14,6 +14,8 @@ import Control.Monad.IO.Class (liftIO)
 
 -- qualified imports
 
+import qualified Data.Text as T
+
 import qualified System.IO as IO
 import qualified System.Directory as D
 
@@ -132,7 +134,7 @@ testFileDiff = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [2,3,5,6] [(0,"w"),(3,"x"),(4,"y"),(5,"z")])
+    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [2,3,5,6] [(0, T.pack "w"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z")])
     (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
 
 testFileDiffEmptyFiles :: Assertion
@@ -148,7 +150,7 @@ testFileDiffEmptyBase = do
     createFileWithContents "BASE" ""
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0,"w"),(1,"a"),(2,"b"),(3,"x"),(4,"y"),(5,"z"),(6,"e")])
+    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
     (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
 
 testFileDiffEmptyComp :: Assertion
@@ -170,7 +172,7 @@ testNonexistentFileDiff2 :: Assertion
 testNonexistentFileDiff2 = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0,"w"),(1,"a"),(2,"b"),(3,"x"),(4,"y"),(5,"z"),(6,"e")])
+    let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
     (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
 
 testNonexistentFileDiff3 :: Assertion
@@ -210,7 +212,7 @@ testDirDiff = do
             [ FTypes.Filediff
                 { FTypes.base = "common/x"
                 , FTypes.comp = "common/x"
-                , FTypes.linediff = (SeqDiff [1] [(1,"b")]) }
+                , FTypes.linediff = (SeqDiff [1] [(1, T.pack "b")]) }
             , FTypes.Filediff
                     { FTypes.base = "aonly/afile"
                     , FTypes.comp = "aonly/afile"
@@ -218,7 +220,7 @@ testDirDiff = do
             , FTypes.Filediff
                 { FTypes.base = "bonly/bfile"
                 , FTypes.comp = "bonly/bfile"
-                , FTypes.linediff = (SeqDiff [] [(0,"b"),(1,"b"),(2,"b")]) } ]
+                , FTypes.linediff = (SeqDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")]) } ]
         }
     actualDiff @?= expectedDiff
 
@@ -257,9 +259,9 @@ testIdentityDirDiff = do
 
 testSequenceDiffComposition :: Assertion
 testSequenceDiffComposition = do
-    let a = ["a","b","c","d","e","f","g"]
-    let b = ["w","a","b","x","y","z","e"]
-    let c = ["#","x","#","#","y","e"]
+    let a = "abcdefg"
+    let b = "wabxyze"
+    let c = "#x##ye"
 
     let ab = FSeq.diffSequences a b
     let bc = FSeq.diffSequences b c
@@ -323,20 +325,16 @@ testDirectoryDiffComposition = do
 
 testFileApply :: Assertion
 testFileApply = do
-    let baseContents = "a\nb\nc\nd\ne\nf\ng"
-    let compContents = "w\na\nb\nx\ny\nz\ne"
+    let baseContents = "a\nb\nc\nd\ne\nf\ng\n"
+    let compContents = "w\na\nb\nx\ny\nz\ne\n"
 
     createFileWithContents "BASE" baseContents
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    --IO.withFile "COMP" IO.WriteMode (flip IO.hPutStr $ compContents)
     applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (lines compContents)
-    --n <- readFile "COMP"
-    --o <- readFile "BASE"
-    --o @?= n
-    --join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 -- directory apply tests
 
@@ -410,9 +408,9 @@ tests = testGroup "unit tests"
     , testCase
         "Testing patching individual files"
         (runTest testFileApply)
-    , testCase
-        "Testing patching algorithm for directories"
-        (runTest testDirApply)
+    --, testCase
+    --    "Testing patching algorithm for directories"
+    --    (runTest testDirApply)
 
     -- alg
     --     composition
