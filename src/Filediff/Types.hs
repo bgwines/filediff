@@ -1,4 +1,5 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -- | Data types used by `Filediff`
 module Filediff.Types
@@ -7,6 +8,8 @@ module Filediff.Types
 , Line
 , Error
 ) where
+
+import GHC.Generics
 
 import qualified Data.Text as T
 
@@ -29,7 +32,7 @@ data Filediff = Filediff {
     base :: FilePath,
     comp :: FilePath,
     linediff :: SeqDiff Line
-} deriving (Eq, Show)
+} deriving (Eq, Show, Generic)
 
 -- TODO: is this mathematically correct?
 instance Monoid Filediff where
@@ -49,7 +52,7 @@ instance Monoid Filediff where
 data Diff = Diff {
     -- relative to directories being diffed
     filediffs :: [Filediff]
-} deriving (Show)
+} deriving (Show, Generic)
 
 instance Eq Diff where
     (==) :: Diff -> Diff -> Bool

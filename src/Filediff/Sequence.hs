@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -12,6 +13,8 @@ module Filediff.Sequence
 , diffSequences
 , applySequenceDiff
 ) where
+
+import GHC.Generics
 
 import Data.MemoCombinators.Class (MemoTable, table)
 import qualified Data.MemoCombinators as Memo
@@ -30,7 +33,7 @@ import Data.Monoid
 data SeqDiff a = SeqDiff {
       dels :: [Int]
     , adds :: [(Int, a)] }
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic)
 
 instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
     mempty :: SeqDiff a
