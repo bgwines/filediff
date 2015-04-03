@@ -140,6 +140,8 @@ applySequenceDiff (SeqDiff dels adds)
 
         insertAtProgressiveIndices' :: Int -> [(Int, a)] -> [a] -> [a]
         insertAtProgressiveIndices' _ [] dest = dest
+        insertAtProgressiveIndices' curr src@((i,s):src') [] =
+            s : insertAtProgressiveIndices' (succ curr) src' []
         insertAtProgressiveIndices' curr src@((i,s):src') dest@(d:dest') =
             if i == curr
                 then s : insertAtProgressiveIndices' (succ curr) src' dest

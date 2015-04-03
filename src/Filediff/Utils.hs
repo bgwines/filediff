@@ -4,8 +4,10 @@
 module Filediff.Utils
 ( -- * filesystem operations
   (</>)
+, (<.>)
 , getFileDirectory
 , removeDotDirs
+, createFileWithContents
 , removeFirstPathComponent
 , getDirectoryContentsRecursiveSafe
 
@@ -13,7 +15,7 @@ module Filediff.Utils
 , dropUntil
 ) where
 
-import Data.List ((\\))
+import Data.List ((\\), inits)
 
 import Control.Monad
 import Control.Applicative
@@ -28,6 +30,11 @@ import qualified System.Directory as D
 -- |
 (</>) :: FilePath -> FilePath -> FilePath
 a </> b = a ++ "/" ++ b
+
+-- | Function composition, but where the inner function's returnvalue
+-- | is inside a functor.
+(<.>) :: (Functor f) => (b -> c) -> (a -> f b) -> (a -> f c)
+f <.> g = \a -> f <$> (g a)
 
 -- | Ternary operator: if the predicate function evalues to `True`
 -- | , take the second argument; otherwise, the first.
@@ -54,6 +61,18 @@ getFileDirectory filepath
 removeDotDirs :: [FilePath] -> [FilePath]
 removeDotDirs = flip (\\) $ [".", ".."]
 
+-- | Creates a file at the specified path with the specified contents.
+-- | If intermediate directories do not exist, it creates them.
+createFileWithContents :: FilePath -> String -> IO ()
+createFileWithContents filepath contents = do
+    let intermediateDirs = filter ((==) '/' . last) . tail . inits $ filepath
+    dirsToCreate <- filterM (not <.> D.doesDirectoryExist) intermediateDirs
+    mapM_ D.createDirectory dirsToCreate
+
+    handle <- IO.openFile filepath IO.WriteMode
+    IO.hPutStr handle contents
+    IO.hClose handle
+
 -- TODO: safe tail?
 -- | Removes the oldest ancestor from a path component, e.g.
 -- |
@@ -65,7 +84,9 @@ removeFirstPathComponent path =
          then error "path without '/' in it"
          else tail . dropUntil ((==) '/') $ path
 
--- returns relative to `directory`
+-- | Gets paths to all files in or in subdirectories of the
+-- | specified directory. Returned paths are relative to the
+-- | given directory.
 getDirectoryContentsRecursiveSafe :: FilePath -> IO [FilePath]
 getDirectoryContentsRecursiveSafe directory = do
     contents <- getDirectoryContentsRecursiveSafe' directory

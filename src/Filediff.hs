@@ -10,7 +10,11 @@ module Filediff
 , applyToDirectory
 ) where
 
+import qualified System.IO as IO
 import qualified System.Directory as D
+
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 
 -- function imports
 
@@ -18,13 +22,9 @@ import Data.Maybe (isJust, fromJust, catMaybes)
 
 import Data.List ((\\), intersect)
 
-import Control.Applicative
-
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-
-import Control.Monad
 import Data.Monoid
+import Control.Applicative
+import Control.Monad
 import Control.Monad.Trans.Either
 import Control.Monad.IO.Class (liftIO)
 
@@ -34,8 +34,10 @@ import Filediff.Types
 import Filediff.Sequence (SeqDiff(..), diffSequences, applySequenceDiff)
 import Filediff.Utils
     ( (</>)
+    , (<.>)
     , getFileDirectory
     , removeDotDirs
+    , createFileWithContents
     , dropUntil
     , removeFirstPathComponent 
     , getDirectoryContentsRecursiveSafe )
@@ -108,14 +110,21 @@ diffDirectories a b = do
 
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
-applyToFile (Filediff _ _ lineDiff) filepath = do
+applyToFile (Filediff _ _ linediff) filepath = do
+    exists <- D.doesFileExist filepath
+    when (not exists) $ createFileWithContents filepath ""
+
     -- Data.Text.IO.readFile is strict, which is what we
     -- need, here (because of the write right after)
     fileContents <- TIO.readFile filepath 
-    let result = (applySequenceDiff lineDiff . T.lines) fileContents
+    let result = (applySequenceDiff linediff . T.lines) fileContents
     TIO.writeFile filepath (T.unlines result)
     return result
 
 -- | `True` upon success; `False` upon failure
-applyToDirectory :: Diff -> FilePath -> IO Bool
-applyToDirectory (Diff filediffs) filepath = return True
+applyToDirectory :: Diff -> FilePath -> IO ()
+applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
+    where
+        apply :: Filediff -> IO [Line]
+        apply diff@(Filediff base compare linediff)
+            = applyToFile diff (filepath </> base)
