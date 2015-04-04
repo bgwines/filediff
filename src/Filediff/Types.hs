@@ -24,10 +24,10 @@ import Data.MemoCombinators (Memo, wrap)
 import Data.MemoCombinators.Class (MemoTable, table, memoize)
 
 -- | The basic data type for a difference between two files. The
--- | `FilePath` is the "base" file in the base-comp comparison, and
--- | is the file to which the patch will be applied. Deletions: a list
--- | of indices at which to remove elements. Additions: each line to add
--- | comes with the index at which it will eventually reside.
+--   `FilePath` is the "base" file in the base-comp comparison, and
+--   is the file to which the patch will be applied. Deletions: a list
+--   of indices at which to remove elements. Additions: each line to add
+--   comes with the index at which it will eventually reside.
 data Filediff = Filediff {
     base :: FilePath,
     comp :: FilePath,

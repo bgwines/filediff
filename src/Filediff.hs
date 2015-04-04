@@ -45,12 +45,12 @@ import Filediff.Utils
 -- * basic operations
 
 -- | /O(mn)/. Compute the difference between the two files (more
--- | specifically, the minimal number of changes to make to transform the
--- | file residing at the location specified by the first
--- | parameter into the second). Throws an exception if either or both of
--- | the parameters point to a directory, not a file.
--- |
--- | Files are allowed to not exist at either or both of the parameters.
+--   specifically, the minimal number of changes to make to transform the
+--   file residing at the location specified by the first
+--   parameter into the second). Throws an exception if either or both of
+--   the parameters point to a directory, not a file.
+--  
+--   Files are allowed to not exist at either or both of the parameters.
 diffFiles :: FilePath -> FilePath -> IO Filediff
 diffFiles a b = do
     aIsDir <- D.doesDirectoryExist a
@@ -68,10 +68,10 @@ diffFiles a b = do
         , linediff = linediff }
 
 -- | Compute the difference between the two directories (more
--- | specifically, the minimal number of changes to make to transform the
--- | directory residing at the location specified by the first
--- | parameter into the second). Throws an exception if either or both of
--- | the parameters point to a file, not a directory.
+--   specifically, the minimal number of changes to make to transform the
+--   directory residing at the location specified by the first
+--   parameter into the second). Throws an exception if either or both of
+--   the parameters point to a file, not a directory.
 diffDirectories :: FilePath -> FilePath -> IO Diff
 diffDirectories a b = do
     aIsFile <- D.doesFileExist a

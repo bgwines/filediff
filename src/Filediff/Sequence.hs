@@ -28,8 +28,8 @@ import Data.Monoid
 -- * data types
 
 -- | Diff between two sequences. `fst` represents the indices
--- | at which to delete, and `snd` represents the indices and
--- | contents to add.
+--   at which to delete, and `snd` represents the indices and
+--   contents to add.
 data SeqDiff a = SeqDiff {
       dels :: [Int]
     , adds :: [(Int, a)] }
@@ -106,9 +106,9 @@ instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
 -- * list operations
 
 -- | returns (to delete, to add)
--- |
--- |     > diffSequences "abcdefg" "wabxyze"
--- |     SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--  
+--       > diffSequences "abcdefg" "wabxyze"
+--       SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
 diffSequences :: forall a. (Eq a, MemoTable a) => [a] -> [a] -> SeqDiff a
 diffSequences a b = SeqDiff
     (nonSubsequenceIndices common a)
@@ -126,10 +126,10 @@ diffSequences a b = SeqDiff
             map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
 
 -- |     > diffSequences "abcdefg" "wabxyze"
--- |     SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
--- |
--- |     > applySequenceDiff it "abcdefg"
--- |     "wabxyze"
+--       SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--  
+--       > applySequenceDiff it "abcdefg"
+--       "wabxyze"
 applySequenceDiff :: forall a. (Eq a) => SeqDiff a -> [a] -> [a]
 applySequenceDiff (SeqDiff dels adds)
     = insertAtProgressiveIndices adds . removeAtIndices dels
@@ -154,8 +154,8 @@ applySequenceDiff (SeqDiff dels adds)
 
 -- optimization: hash lines
 -- | Compute the longest common (potentially noncontiguous) subsequence
--- | between two sequences. Element type is fixed because memoization
--- | requires a static type.
+--   between two sequences. Element type is fixed because memoization
+--   requires a static type.
 longestCommonSubsequence :: forall a. (MemoTable a, Eq a) =>
                                 [a] -> [a] -> [a]
 longestCommonSubsequence
@@ -181,10 +181,10 @@ longestCommonSubsequence
                 caseY = longestCommonSubsequence (x:xs) ys
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
--- | get the index at which each element of `sub` appears. E.g.
--- |
--- |     > subsequenceIndices "abe" "abcdefg"
--- |     [0,1,4]
+--   get the index at which each element of `sub` appears. E.g.
+--  
+--       > subsequenceIndices "abe" "abcdefg"
+--       [0,1,4]
 subsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
 subsequenceIndices [] _ = []
 subsequenceIndices _ [] = error "`sub` was not a subsequence of `super`"
@@ -194,16 +194,16 @@ subsequenceIndices sub@(a:sub') super@(b:super') =
         else     map succ (subsequenceIndices sub super')
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
--- | get the indices at which elements of `sub` do *not* appear. E.g.
--- |
--- |     > nonSubsequenceIndices "abe" "abcdefg"
--- |     [2,3,5,6]
+--   get the indices at which elements of `sub` do *not* appear. E.g.
+--  
+--       > nonSubsequenceIndices "abe" "abcdefg"
+--       [2,3,5,6]
 nonSubsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
 nonSubsequenceIndices sub super =
     [0..(length super - 1)] \\ (subsequenceIndices sub super)
 
 -- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
--- | and indices must all exist
+--   and indices must all exist
 removeAtIndices :: forall a. [Int] -> [a] -> [a]
 removeAtIndices = removeAtIndices' 0
     where
