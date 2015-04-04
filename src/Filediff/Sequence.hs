@@ -16,6 +16,8 @@ module Filediff.Sequence
 
 import GHC.Generics
 
+import Data.Default
+
 import Data.MemoCombinators.Class (MemoTable, table)
 import qualified Data.MemoCombinators as Memo
 
@@ -34,6 +36,10 @@ data SeqDiff a = SeqDiff {
       dels :: [Int]
     , adds :: [(Int, a)] }
     deriving (Show, Eq, Generic)
+
+instance Default (SeqDiff a) where
+    def :: SeqDiff a
+    def = SeqDiff [] []
 
 instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
     mempty :: SeqDiff a

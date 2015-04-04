@@ -11,6 +11,8 @@ module Filediff.Types
 
 import GHC.Generics
 
+import Data.Default
+
 import qualified Data.Text as T
 
 import Data.List (intersect, sortBy)
@@ -64,9 +66,12 @@ instance Eq Diff where
                 then base a `compare` base b
                 else comp a `compare` comp b
 
+instance Default Diff where
+    def :: Diff
+    def = Diff []
+
 instance MemoTable T.Text where
-    --       :: (ByteString -> r) -> ByteString -> r
-    -- table :: Memo ByteString
+    table :: Memo T.Text
     table = wrap T.pack T.unpack table
 
 instance Monoid Diff where
