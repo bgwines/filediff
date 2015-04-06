@@ -59,13 +59,38 @@ diffFiles a b = do
 
     aExists <- D.doesFileExist a
     bExists <- D.doesFileExist b
-    aLines <- if aExists then T.lines <$> TIO.readFile a else return []
-    bLines <- if bExists then T.lines <$> TIO.readFile b else return []
-    let linediff = diffSequences aLines bLines
-    return Filediff
-        { base = a
-        , comp = b
-        , linediff = linediff }
+    case (aExists, bExists) of
+        (False, False) -> return $ Filediff a b mempty
+        (False, True ) -> addCase
+        (True , False) -> delCase
+        (True , True ) -> modCase
+    where
+        addCase :: IO Filediff
+        addCase = do
+            let aLines = []
+            bLines <- T.lines <$> TIO.readFile b
+            return Filediff
+                { base = a
+                , comp = b
+                , change = Add $ diffSequences aLines bLines }
+
+        delCase :: IO Filediff
+        delCase = do
+            aLines <- T.lines <$> TIO.readFile a
+            let bLines = []
+            return Filediff
+                { base = a
+                , comp = b
+                , change = Del $ diffSequences aLines bLines }
+
+        modCase :: IO Filediff
+        modCase = do
+            aLines <- T.lines <$> TIO.readFile a
+            bLines <- T.lines <$> TIO.readFile b
+            return Filediff
+                { base = a
+                , comp = b
+                , change = Mod $ diffSequences aLines bLines }
 
 -- | Compute the difference between the two directories (more
 --   specifically, the minimal number of changes to make to transform the
@@ -99,28 +124,39 @@ diffDirectories a b = do
             <$> mapM (\fp -> diffFiles (a </> fp) (b </> fp)) filepaths
 
         isIdentityFileDiff :: Filediff -> Bool
-        isIdentityFileDiff = (==) mempty . linediff
+        isIdentityFileDiff = (==) mempty . change
 
         removeFirstPathComponentFromDiff :: Filediff -> Filediff
-        removeFirstPathComponentFromDiff (Filediff base comp seqdiff)
-            = Filediff
+        removeFirstPathComponentFromDiff
+            (Filediff base comp change) =
+            Filediff
                 (removeFirstPathComponent base)
                 (removeFirstPathComponent comp)
-                seqdiff
+                change
 
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
-applyToFile (Filediff _ _ linediff) filepath = do
-    exists <- D.doesFileExist filepath
-    when (not exists) $ createFileWithContents filepath ""
-
-    -- Data.Text.IO.readFile is strict, which is what we
-    -- need, here (because of the write right after)
-    fileContents <- TIO.readFile filepath 
-    let result = (applySequenceDiff linediff . T.lines) fileContents
-    TIO.writeFile filepath (safeInit . T.unlines $ result) -- init for trailing \n
-    return result
+applyToFile (Filediff _ _ change) filepath = do
+    case change of
+        Del _       -> delCase
+        Mod seqdiff -> modCase seqdiff
+        Add seqdiff -> addCase seqdiff
     where
+        delCase :: IO [Line]
+        delCase = D.removeFile filepath >> return []
+
+        addCase :: SeqDiff Line -> IO [Line]
+        addCase seqdiff = createFileWithContents filepath "" >> modCase seqdiff
+
+        modCase :: SeqDiff Line -> IO [Line]
+        modCase seqdiff = do
+            -- Data.Text.IO.readFile is strict, which is what we
+            -- need, here (because of the write right after)
+            file <- TIO.readFile filepath 
+            let result = applySequenceDiff seqdiff . T.lines $ file
+            TIO.writeFile filepath (safeInit . T.unlines $ result) -- init for trailing \n
+            return result
+
         safeInit :: T.Text -> T.Text
         safeInit x = if T.null x then x else T.init x
 
@@ -129,5 +165,5 @@ applyToDirectory :: Diff -> FilePath -> IO ()
 applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
     where
         apply :: Filediff -> IO [Line]
-        apply diff@(Filediff base compare linediff)
+        apply diff@(Filediff base compare _)
             = applyToFile diff (filepath </> base)

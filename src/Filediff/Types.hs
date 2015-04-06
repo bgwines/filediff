@@ -5,6 +5,7 @@
 module Filediff.Types
 ( Filediff(..)
 , Diff(..)
+, FileChange(..)
 , Line
 , Error
 ) where
@@ -33,13 +34,35 @@ import Data.MemoCombinators.Class (MemoTable, table, memoize)
 data Filediff = Filediff {
     base :: FilePath,
     comp :: FilePath,
-    linediff :: SeqDiff Line
+    change :: FileChange
 } deriving (Eq, Show, Generic)
+
+-- | The types and sets of changes possible between two files.
+-- `CompositionAddDel` is hack to make `mappend` work properly :/
+data FileChange
+    = Del (SeqDiff Line)
+    | Mod (SeqDiff Line)
+    | Add (SeqDiff Line) deriving (Eq, Show, Generic)
+
+instance Monoid FileChange where
+    mempty :: FileChange
+    mempty = Mod mempty -- no changes (no add / del); identity diff
+
+    mappend :: FileChange -> FileChange -> FileChange
+    mappend (Del _    ) (Del _    ) = error "del ++ del"
+    mappend (Del _    ) (Mod _    ) = error "del ++ mod"
+    mappend (Del diff1) (Add diff2) = Mod $ diff1 `mappend` diff2
+    mappend (Mod _    ) (Del diff2) = Del diff2
+    mappend (Mod diff1) (Mod diff2) = Mod $ diff1 `mappend` diff2
+    mappend (Mod _    ) (Add _    ) = error "mod ++ add"
+    mappend (Add _    ) (Del _    ) = mempty -- will be filtered out during directory composition. Yes; this isn't ideal, but it's at least clean.
+    mappend (Add diff1) (Mod diff2) = Add $ diff1 `mappend` diff2
+    mappend (Add _    ) (Add _    ) = error "add ++ add"
 
 -- TODO: is this mathematically correct?
 instance Monoid Filediff where
     mempty :: Filediff
-    mempty = Filediff "" "" mempty
+    mempty = Filediff "" "" (Mod mempty)
 
     mappend :: Filediff -> Filediff -> Filediff
     mappend fd1 fd2 =
@@ -48,7 +71,7 @@ instance Monoid Filediff where
             else Filediff {
                 base = base fd1,
                 comp = comp fd2,
-                linediff = linediff fd1 `mappend` linediff fd2 }
+                change = change fd1 `mappend` change fd2 }
 
 -- | A data type for differences between directories
 data Diff = Diff {
@@ -84,7 +107,7 @@ instance Monoid Diff where
         where
             filediffs :: [Filediff]
             filediffs
-                = filter ((/=) mempty . linediff)
+                = filter ((/=) mempty . change)
                 $ exclusion ++ (map (uncurry mappend) intersection)
 
             exclusion :: [Filediff]
