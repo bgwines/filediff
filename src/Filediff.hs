@@ -118,8 +118,11 @@ applyToFile (Filediff _ _ linediff) filepath = do
     -- need, here (because of the write right after)
     fileContents <- TIO.readFile filepath 
     let result = (applySequenceDiff linediff . T.lines) fileContents
-    TIO.writeFile filepath (T.unlines result)
+    TIO.writeFile filepath (safeInit . T.unlines $ result) -- init for trailing \n
     return result
+    where
+        safeInit :: T.Text -> T.Text
+        safeInit x = if T.null x then x else T.init x
 
 -- | `True` upon success; `False` upon failure
 applyToDirectory :: Diff -> FilePath -> IO ()

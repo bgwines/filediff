@@ -152,7 +152,7 @@ testFileDiff = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [2,3,5,6] [(0, T.pack "w"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z")])
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testFileDiffEmptyFiles :: Assertion
 testFileDiffEmptyFiles = do
@@ -160,7 +160,7 @@ testFileDiffEmptyFiles = do
     createFileWithContents "COMP" ""
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" mempty
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testFileDiffEmptyBase :: Assertion
 testFileDiffEmptyBase = do
@@ -168,7 +168,7 @@ testFileDiffEmptyBase = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testFileDiffEmptyComp :: Assertion
 testFileDiffEmptyComp = do
@@ -176,33 +176,33 @@ testFileDiffEmptyComp = do
     createFileWithContents "COMP" ""
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [0,1,2,3,4,5,6] [])
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff1 :: Assertion
 testNonexistentFileDiff1 = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [0,1,2,3,4,5,6] [])
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff2 :: Assertion
 testNonexistentFileDiff2 = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" (SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff3 :: Assertion
 testNonexistentFileDiff3 = do
     let expectedFilediff = FTypes.Filediff "BASE" "COMP" mempty
-    (F.diffFiles "BASE" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testIdentityFileDiff :: Assertion
 testIdentityFileDiff = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
     let expectedFilediff = FTypes.Filediff "COMP" "COMP" mempty
-    (F.diffFiles "COMP" "COMP") >>= (flip (@?=)) expectedFilediff
+    (F.diffFiles "COMP" "COMP") >>= (@=?) expectedFilediff
 
 -- directory diff tests
 
@@ -270,7 +270,7 @@ testIdentityDirDiff = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
 
     let expectedDiff = mempty
-    (F.diffDirectories "." ".") >>= (flip (@?=)) expectedDiff
+    (F.diffDirectories "." ".") >>= (@=?) expectedDiff
 
 -- composition tests
 
@@ -353,8 +353,90 @@ testSequenceApplyEdgeCase1 = do
 
 testFileApply :: Assertion
 testFileApply = do
-    let baseContents = "a\nb\nc\nd\ne\nf\ng\n"
-    let compContents = "w\na\nb\nx\ny\nz\ne\n"
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let compContents = "w\na\nb\nx\ny\nz\ne"
+
+    createFileWithContents "BASE" baseContents
+    createFileWithContents "COMP" compContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+    applied <- F.applyToFile fileDiff "BASE"
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+
+testFileApplyEdgeCase1 :: Assertion
+testFileApplyEdgeCase1 = do
+    let baseContents = ""
+    let compContents = "w\na\nb\nx\ny\nz\ne"
+
+    createFileWithContents "BASE" baseContents
+    createFileWithContents "COMP" compContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+    applied <- F.applyToFile fileDiff "BASE"
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+
+testFileApplyEdgeCase2 :: Assertion
+testFileApplyEdgeCase2 = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let compContents = ""
+
+    createFileWithContents "BASE" baseContents
+    createFileWithContents "COMP" compContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+    applied <- F.applyToFile fileDiff "BASE"
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+
+-- tests deletion of a file
+testFileApplyEdgeCase3 :: Assertion
+testFileApplyEdgeCase3 = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+
+    createFileWithContents "BASE" baseContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+    applied <- F.applyToFile fileDiff "BASE"
+
+    exists <- D.doesFileExist "BASE"
+    assertBool "File should be deleted." (not exists)
+
+-- tests creation of a file
+testFileApplyEdgeCase4 :: Assertion
+testFileApplyEdgeCase4 = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let compContents = "w\na\nb\nx\ny\nz\ne"
+
+    createFileWithContents "BASE" baseContents
+    createFileWithContents "COMP" compContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+
+    D.removeFile "BASE"
+
+    applied <- F.applyToFile fileDiff "BASE"
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+
+testFileApplyEdgeCase5 :: Assertion
+testFileApplyEdgeCase5 = do
+    let baseContents = ""
+    let compContents = "\n"
+
+    createFileWithContents "BASE" baseContents
+    createFileWithContents "COMP" compContents
+
+    fileDiff <- F.diffFiles "BASE" "COMP"
+    applied <- F.applyToFile fileDiff "BASE"
+    applied @?= (T.lines . T.pack $ compContents)
+    join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
+
+testFileApplyEdgeCase6 :: Assertion
+testFileApplyEdgeCase6 = do
+    let baseContents = "\n"
+    let compContents = ""
 
     createFileWithContents "BASE" baseContents
     createFileWithContents "COMP" compContents
@@ -386,8 +468,17 @@ testDirApply = do
     diff <- F.diffDirectories "a" "b"
     F.applyToDirectory diff "a"
 
-    directoriesEqual <- return True --areDirectoriesEqual "a" "b"
+    -- removing files and removing directories
+    -- also addition of bfile to `a` adds \n
+
+    directoriesEqual <- areDirectoriesEqual "a" "b"
     (@?) directoriesEqual "Directories not equal after application"
+
+testInMemoryDirApply :: Assertion
+testInMemoryDirApply = do
+    0 @?= 1
+
+-- tests
 
 tests :: TestTree
 tests = testGroup "unit tests"
@@ -437,8 +528,29 @@ tests = testGroup "unit tests"
         "Testing patching individual files"
         (runTest testFileApply)
     , testCase
-        "Testing patching algorithm for directories"
+        "Testing patching individual files (edge case 1)"
+        (runTest testFileApplyEdgeCase1)
+    , testCase
+        "Testing patching individual files (edge case 2)"
+        (runTest testFileApplyEdgeCase2)
+    , testCase
+        "Testing patching individual files (edge case 3)"
+        (runTest testFileApplyEdgeCase3)
+    , testCase
+        "Testing patching individual files (edge case 4)"
+        (runTest testFileApplyEdgeCase4)
+    , testCase
+        "Testing patching individual files (edge case 5)"
+        (runTest testFileApplyEdgeCase5)
+    , testCase
+        "Testing patching individual files (edge case 6)"
+        (runTest testFileApplyEdgeCase6)
+    , testCase
+        "Testing patching directories"
         (runTest testDirApply)
+    , testCase
+        "Testin in-memory patching directories"
+        (runTest testInMemoryDirApply)
 
     -- alg
     -- edge cases

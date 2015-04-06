@@ -29,8 +29,8 @@ import Data.Monoid
 
 -- * data types
 
--- | Diff between two sequences. `fst` represents the indices
---   at which to delete, and `snd` represents the indices and
+-- | Diff between two lists. `dels` represents the indices
+--   at which to delete, and `adds` represents the indices and
 --   contents to add.
 data SeqDiff a = SeqDiff {
       dels :: [Int]
