@@ -6,6 +6,7 @@ module Filediff
 ( -- * basic operations
   diffFiles
 , diffDirectories
+, diffDirectoriesWithIgnoredSubdirs
 , applyToFile
 , applyToDirectory
 ) where
@@ -39,8 +40,9 @@ import Filediff.Utils
     , removeDotDirs
     , createFileWithContents
     , dropUntil
-    , removeFirstPathComponent 
-    , getDirectoryContentsRecursiveSafe )
+    , removeFirstPathComponent
+    , getDirectoryContentsRecursiveSafe
+    , isPrefix)
 
 -- * basic operations
 
@@ -98,13 +100,21 @@ diffFiles a b = do
 --   parameter into the second). Throws an exception if either or both of
 --   the parameters point to a file, not a directory.
 diffDirectories :: FilePath -> FilePath -> IO Diff
-diffDirectories a b = do
+diffDirectories a b = diffDirectoriesWithIgnoredSubdirs a b [] []
+
+-- | Diff two directories, ignoring some subdirectories. The first
+-- `[FilePath]` parameter refers to the first `FilePath` parameter,
+-- and same for the second, respectively.
+diffDirectoriesWithIgnoredSubdirs :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> IO Diff
+diffDirectoriesWithIgnoredSubdirs a b aToIgnore bToIgnore = do
     aIsFile <- D.doesFileExist a
     bIsFile <- D.doesFileExist b
     when (aIsFile || bIsFile) $ error $ "One or both of " ++ a ++ " and " ++ b ++ "is not a directory, but a file."
 
-    aContents <- getDirectoryContentsRecursiveSafe a
-    bContents <- getDirectoryContentsRecursiveSafe b
+    aContents' <- getDirectoryContentsRecursiveSafe a
+    bContents' <- getDirectoryContentsRecursiveSafe b
+    let aContents = filter (not . shouldIgnore aToIgnore) aContents'
+    let bContents = filter (not . shouldIgnore bToIgnore) bContents'
 
     intersectionDiffs <- getDiffs $ intersect aContents bContents
 
@@ -127,12 +137,14 @@ diffDirectories a b = do
         isIdentityFileDiff = (==) mempty . change
 
         removeFirstPathComponentFromDiff :: Filediff -> Filediff
-        removeFirstPathComponentFromDiff
-            (Filediff base comp change) =
+        removeFirstPathComponentFromDiff (Filediff base comp change) =
             Filediff
                 (removeFirstPathComponent base)
                 (removeFirstPathComponent comp)
                 change
+
+        shouldIgnore :: [FilePath] -> FilePath -> Bool
+        shouldIgnore toIgnore filepath = any (flip isPrefix $ filepath) toIgnore
 
 -- | /O(n)/. Apply a diff to a directory or file
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()

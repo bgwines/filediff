@@ -259,6 +259,49 @@ testDirDiff = do
         }
     actualDiff @?= expectedDiff
 
+testDirDiffIgnoreFiles :: Assertion
+testDirDiffIgnoreFiles = do
+    D.createDirectory "a"
+    D.createDirectory "b"
+
+    D.createDirectory "a/common"
+    D.createDirectory "a/common2"
+    D.createDirectory "b/common"
+    D.createDirectory "b/common2"
+
+    D.createDirectory "a/aonly"
+    D.createDirectory "a/aonly2"
+    D.createDirectory "b/bonly"
+    D.createDirectory "b/bonly2"
+
+    createFileWithContents "a/common/x" "x\na\nx"
+    createFileWithContents "a/common2/x" "x\na\nx"
+    createFileWithContents "b/common/x" "x\nb\nx"
+    createFileWithContents "b/common2/x" "x\nb\nx"
+
+    createFileWithContents "a/aonly/afile" "a\na\na"
+    createFileWithContents "a/aonly2/afile" "a\na\na"
+    createFileWithContents "b/bonly/bfile" "b\nb\nb"
+    createFileWithContents "b/bonly2/bfile" "b\nb\nb"
+
+    actualDiff <- F.diffDirectoriesWithIgnoredSubdirs "a" "b" ["aonly2", "common2"] ["bonly2", "common2"]
+    let expectedDiff = F.Diff {
+        F.filediffs =
+            [ F.Filediff
+                { F.base = "common/x"
+                , F.comp = "common/x"
+                , F.change = F.Mod $ SeqDiff [1] [(1, T.pack "b")] }
+            , F.Filediff
+                    { F.base = "aonly/afile"
+                    , F.comp = "aonly/afile"
+                    , F.change = F.Del $ SeqDiff [0,1,2] [] }
+            , F.Filediff
+                { F.base = "bonly/bfile"
+                , F.comp = "bonly/bfile"
+                , F.change = F.Add $ SeqDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")] } ]
+        }
+    actualDiff @?= expectedDiff
+
 testDirDiffEmptyDirectories :: Assertion
 testDirDiffEmptyDirectories = do
     D.createDirectory "a"
@@ -532,6 +575,9 @@ tests = testGroup "unit tests"
     , testCase
         "Testing diffing for directories"
         (runTest testDirDiff)
+    , testCase
+        "Testing diffing for directories, with ignoring subdirs"
+        (runTest testDirDiffIgnoreFiles)
 
     -- patching
     , testCase

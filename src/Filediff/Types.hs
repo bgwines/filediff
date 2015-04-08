@@ -38,7 +38,6 @@ data Filediff = Filediff {
 } deriving (Eq, Show, Generic)
 
 -- | The types and sets of changes possible between two files.
--- `CompositionAddDel` is hack to make `mappend` work properly :/
 data FileChange
     = Del (SeqDiff Line)
     | Mod (SeqDiff Line)
@@ -124,17 +123,17 @@ instance Monoid Diff where
                 (Filediff bBase bComp _)
                 = (aBase == bBase) && (aComp == bComp)
 
-excludeBy  :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-excludeBy _ [] _ = []
-excludeBy f (x:xs) ys =
-    if any (f x) ys
-        then excludeBy f xs ys
-        else x : excludeBy f xs ys
+            excludeBy  :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+            excludeBy _ [] _ = []
+            excludeBy f (x:xs) ys =
+                if any (f x) ys
+                    then excludeBy f xs ys
+                    else x : excludeBy f xs ys
 
-intersectBy :: (a -> a -> Bool) -> [a] -> [a] -> [(a, a)]
-intersectBy f a b
-    = filter (uncurry f)
-    $ (\x y -> (x,y)) <$> a <*> b
+            intersectBy :: (a -> a -> Bool) -> [a] -> [a] -> [(a, a)]
+            intersectBy f a b
+                = filter (uncurry f)
+                $ (\x y -> (x,y)) <$> a <*> b
 
 -- | Data type for a line
 type Line = T.Text

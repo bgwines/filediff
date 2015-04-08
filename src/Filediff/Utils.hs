@@ -13,6 +13,7 @@ module Filediff.Utils
 
 -- * list operations
 , dropUntil
+, isPrefix
 ) where
 
 import Data.List ((\\), inits)
@@ -125,3 +126,7 @@ dropUntil f (x:xs) =
     if f x
         then (x:xs)
         else dropUntil f xs
+
+-- | (intended to be used infix)
+isPrefix :: (Eq a) => [a] -> [a] -> Bool
+a `isPrefix` b = (==) (length a) . length . takeWhile id $ zipWith (==) a b
