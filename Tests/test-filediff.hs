@@ -531,6 +531,65 @@ testDirApply = do
     directoriesEqual <- areDirectoriesEqual "a" "b"
     (@?) directoriesEqual "Directories not equal after application"
 
+-- assorted
+
+setUpRelativePathTest :: IO ()
+setUpRelativePathTest = do
+    D.createDirectory "a"
+    D.createDirectory "_"
+    D.createDirectory "_/b"
+
+    D.setCurrentDirectory "a"
+    createFileWithContents "a" "a"  
+    D.setCurrentDirectory ".."
+
+    D.setCurrentDirectory "_/b"
+    createFileWithContents "a" "b"
+    D.setCurrentDirectory "../.."
+
+relativePathExpectedDiff :: F.Diff
+relativePathExpectedDiff = F.Diff {
+    F.filediffs =
+        [ F.Filediff
+            { F.base = "a"
+            , F.comp = "a"
+            , F.change = F.Mod $ SeqDiff [0] [(0, T.pack "b")] } ]
+    }
+
+testRelativePathness :: Assertion
+testRelativePathness = do
+    setUpRelativePathTest
+
+    let expectedDiff = relativePathExpectedDiff
+    actualDiff <- F.diffDirectories "a" "_/b"
+    actualDiff @?= expectedDiff
+
+testRelativePathnessEdgeCases :: Assertion
+testRelativePathnessEdgeCases = do
+    setUpRelativePathTest
+    test "a"  "_/b"
+    test "a/" "_/b"
+    test "a"  "_/b/"
+    test "a/" "_/b/"
+    test "./a"  "_/b"
+    test "./a/" "_/b"
+    test "./a"  "_/b/"
+    test "./a/" "_/b/"
+    test "a"  "./_/b"
+    test "a/" "./_/b"
+    test "a"  "./_/b/"
+    test "a/" "./_/b/"
+    test "./a"  "./_/b"
+    test "./a/" "./_/b"
+    test "./a"  "./_/b/"
+    test "./a/" "./_/b/"
+    test "./a/" "./_/b/"
+    where
+        test :: FilePath -> FilePath -> Assertion
+        test a b = do
+            actualDiff <- F.diffDirectories a b
+            actualDiff @?= relativePathExpectedDiff
+
 -- tests
 
 tests :: TestTree
@@ -636,6 +695,14 @@ tests = testGroup "unit tests"
     , testCase
         "Testing directory diffing composition"
         (runTest testDirectoryDiffComposition)
+
+    -- assorted
+    , testCase
+        "Testing that paths are relative"
+        (runTest testRelativePathness)
+    , testCase
+        "Testing that paths are relative (edge cases)"
+        (runTest testRelativePathnessEdgeCases)
     ]
 
 main :: IO ()

@@ -9,11 +9,17 @@ module Filediff.Utils
 , removeDotDirs
 , createFileWithContents
 , removeFirstPathComponent
+, removePathComponents
 , getDirectoryContentsRecursiveSafe
 
--- * list operations
+  -- * file path formatting
+, dropInitialSlash
+, dropTrailingSlash
+
+  -- * list operations
 , dropUntil
 , isPrefix
+, dropPrefix
 ) where
 
 import Data.List ((\\), inits)
@@ -85,6 +91,16 @@ removeFirstPathComponent path =
          then error "path without '/' in it"
          else tail . dropUntil ((==) '/') $ path
 
+-- | Removes the k oldest ancestors from a path component, e.g.
+-- |
+-- |     > removePathComponents 2 "a/b/c"
+-- |     "c"
+removePathComponents :: Int -> FilePath -> FilePath
+removePathComponents k
+    = last
+    . take k
+    . iterate removeFirstPathComponent
+
 -- | Gets paths to all files in or in subdirectories of the
 -- | specified directory. Returned paths are relative to the
 -- | given directory.
@@ -96,9 +112,8 @@ getDirectoryContentsRecursiveSafe directory = do
         then directory
         else directory </> ""
     let numPathComponents = length . filter ((==) '/') $ directoryWithTrailingSlash
-    let removePathComponents = last . take (numPathComponents + 1) . iterate removeFirstPathComponent
 
-    return . map removePathComponents $ contents
+    return . map (removePathComponents $ numPathComponents + 1) $ contents
 
 getDirectoryContentsRecursiveSafe' :: FilePath -> IO [FilePath]
 getDirectoryContentsRecursiveSafe' directory = do
@@ -116,6 +131,20 @@ getDirectoryContentsRecursiveSafe' directory = do
 
             return $ files ++ recFiles
 
+-- * file path formatting
+
+-- | If the parameter has a '/' as its first character, drop it.
+dropInitialSlash :: String -> String
+dropInitialSlash ('/':s) = s
+dropInitialSlash s = s
+
+-- | If the parameter has a '/' as its last character, drop it.
+dropTrailingSlash :: String -> String
+dropTrailingSlash [] = []
+dropTrailingSlash s = if last s == '/'
+    then init s
+    else s
+
 -- * list operations
 
 -- | Drops elements from the given list until the predicate function
@@ -130,3 +159,10 @@ dropUntil f (x:xs) =
 -- | (intended to be used infix)
 isPrefix :: (Eq a) => [a] -> [a] -> Bool
 a `isPrefix` b = (==) (length a) . length . takeWhile id $ zipWith (==) a b
+
+-- | assumes `a` is a prefix of `b`; errors if false
+dropPrefix :: (Eq a) => [a] -> [a] -> [a]
+dropPrefix [] bs = bs
+dropPrefix (a:as) (b:bs)
+    | a /= b = error "not a prefix"
+    | otherwise = dropPrefix as bs

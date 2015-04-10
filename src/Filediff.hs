@@ -41,8 +41,12 @@ import Filediff.Utils
     , createFileWithContents
     , dropUntil
     , removeFirstPathComponent
+    , removePathComponents
     , getDirectoryContentsRecursiveSafe
-    , isPrefix)
+    , isPrefix
+    , dropPrefix
+    , dropInitialSlash
+    , dropTrailingSlash )
 
 -- * basic operations
 
@@ -106,7 +110,7 @@ diffDirectories a b = diffDirectoriesWithIgnoredSubdirs a b [] []
 -- `[FilePath]` parameter refers to the first `FilePath` parameter,
 -- and same for the second, respectively.
 diffDirectoriesWithIgnoredSubdirs :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> IO Diff
-diffDirectoriesWithIgnoredSubdirs a b aToIgnore bToIgnore = do
+diffDirectoriesWithIgnoredSubdirs a' b' aToIgnore bToIgnore = do
     aIsFile <- D.doesFileExist a
     bIsFile <- D.doesFileExist b
     when (aIsFile || bIsFile) $ error $ "One or both of " ++ a ++ " and " ++ b ++ "is not a directory, but a file."
@@ -122,10 +126,16 @@ diffDirectoriesWithIgnoredSubdirs a b aToIgnore bToIgnore = do
 
     bOnlyDiffs <- getDiffs $ bContents \\ aContents
 
-    let allDiffs = map removeFirstPathComponentFromDiff $ intersectionDiffs ++ aOnlyDiffs ++ bOnlyDiffs
+    let allDiffs = map makeRelative $ intersectionDiffs ++ aOnlyDiffs ++ bOnlyDiffs
 
     return $ Diff allDiffs
     where
+        a :: FilePath
+        a = dropTrailingSlash a'
+
+        b :: FilePath
+        b = dropTrailingSlash b'
+
         -- | `x` is the prefix of the "base" of the diff; `y` is the
         -- | "compare".
         getDiffs :: [FilePath] -> IO [Filediff]
@@ -136,11 +146,11 @@ diffDirectoriesWithIgnoredSubdirs a b aToIgnore bToIgnore = do
         isIdentityFileDiff :: Filediff -> Bool
         isIdentityFileDiff = (==) mempty . change
 
-        removeFirstPathComponentFromDiff :: Filediff -> Filediff
-        removeFirstPathComponentFromDiff (Filediff base comp change) =
+        makeRelative :: Filediff -> Filediff
+        makeRelative (Filediff base comp change) =
             Filediff
-                (removeFirstPathComponent base)
-                (removeFirstPathComponent comp)
+                (dropInitialSlash $ dropPrefix a base)
+                (dropInitialSlash $ dropPrefix b comp)
                 change
 
         shouldIgnore :: [FilePath] -> FilePath -> Bool
