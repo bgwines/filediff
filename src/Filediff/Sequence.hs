@@ -103,6 +103,7 @@ instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
 
             survivingABAdds' :: [(Int, a)] -> [Int] -> [(Int, a)]
             survivingABAdds' [] _ = []
+            survivingABAdds' adds [] = adds
             survivingABAdds' (a:adds) (d:dels) =
                 case (fst a) `compare` d of
                     LT -> (:) a $ survivingABAdds' adds (d:dels)

@@ -359,6 +359,16 @@ testSequenceDiffCompositionEdgeCase1 = do
 
     ab `mappend` bc @?= ac
 
+testSequenceDiffCompositionEdgeCase2 :: Assertion
+testSequenceDiffCompositionEdgeCase2 = do
+    let ab = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(0,"a")]}
+    let bc = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(1,"b")]}
+
+    let ac = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(0,"a"),(1,"b")]}
+
+    ab `mappend` bc @?= ac
+
+
 testFileDiffComposition :: Assertion
 testFileDiffComposition = do
     createFileWithContents "a" "a\nb\nc\nd\ne\nf\ng"
@@ -540,7 +550,7 @@ setUpRelativePathTest = do
     D.createDirectory "_/b"
 
     D.setCurrentDirectory "a"
-    createFileWithContents "a" "a"  
+    createFileWithContents "a" "a"
     D.setCurrentDirectory ".."
 
     D.setCurrentDirectory "_/b"
@@ -689,6 +699,9 @@ tests = testGroup "unit tests"
     , testCase
         "Testing sequence diffing composition (edge case 1)"
         (testSequenceDiffCompositionEdgeCase1)
+    , testCase
+        "Testing sequence diffing composition (edge case 2)"
+        (testSequenceDiffCompositionEdgeCase2)
     , testCase
         "Testing file diffing composition"
         (runTest testFileDiffComposition)
