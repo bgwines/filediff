@@ -37,6 +37,7 @@ import Data.Either.Combinators (isLeft, fromLeft)
 import Filediff.Sequence (SeqDiff(..))
 import qualified Filediff.Sequence as FSeq
 import qualified Filediff as F
+import qualified Filediff.Stats as F
 import qualified Filediff.Types as F
 
 -- helper functions
@@ -600,6 +601,23 @@ testRelativePathnessEdgeCases = do
             actualDiff <- F.diffDirectories a b
             actualDiff @?= relativePathExpectedDiff
 
+testDiffStats :: Assertion
+testDiffStats = do
+    D.createDirectory "a"
+    D.createDirectory "b"
+
+    createFileWithContents "a/common" "x\na\nx"
+    createFileWithContents "b/common" "x\nb\nx"
+
+    createFileWithContents "a/afile" "a\na"
+    createFileWithContents "b/bfile" "b\nb\nb"
+
+    diff <- F.diffDirectories "a" "b"
+
+    F.numFilesAffected diff @?= 3
+    F.numAddedLines diff @?= 1 + 3
+    F.numDeletedLines diff @?= 1 + 2
+
 -- tests
 
 tests :: TestTree
@@ -716,6 +734,9 @@ tests = testGroup "unit tests"
     , testCase
         "Testing that paths are relative (edge cases)"
         (runTest testRelativePathnessEdgeCases)
+    , testCase
+        "Testing diff statistics"
+        (runTest testDiffStats)
     ]
 
 main :: IO ()

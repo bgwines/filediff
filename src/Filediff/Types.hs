@@ -6,6 +6,10 @@ module Filediff.Types
 ( Filediff(..)
 , Diff(..)
 , FileChange(..)
+, seqDiff
+, isDel
+, isMod
+, isAdd
 , Line
 , Error
 ) where
@@ -42,6 +46,28 @@ data FileChange
     = Del (SeqDiff Line)
     | Mod (SeqDiff Line)
     | Add (SeqDiff Line) deriving (Eq, Show, Generic)
+
+-- | Gets the 'SeqDiff' stored in a 'FileChange'.
+seqDiff :: FileChange -> SeqDiff Line
+seqDiff (Del diff) = diff
+seqDiff (Mod diff) = diff
+seqDiff (Add diff) = diff
+
+-- | Whether a 'FileChange' is a deletion or not.
+isDel :: FileChange -> Bool
+isDel (Del _) = True
+isDel (Mod _) = False
+isDel (Add _) = False
+-- | Whether a 'FileChange' is a modification or not.
+isMod :: FileChange -> Bool
+isMod (Del _) = False
+isMod (Mod _) = True
+isMod (Add _) = False
+-- | Whether a 'FileChange' is a addition or not.
+isAdd :: FileChange -> Bool
+isAdd (Del _) = False
+isAdd (Mod _) = False
+isAdd (Add _) = True
 
 instance Monoid FileChange where
     mempty :: FileChange
