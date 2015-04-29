@@ -156,7 +156,8 @@ diffDirectoriesWithIgnoredSubdirs a' b' aToIgnore bToIgnore = do
         shouldIgnore :: [FilePath] -> FilePath -> Bool
         shouldIgnore toIgnore filepath = any (flip isPrefix $ filepath) toIgnore
 
--- | /O(n)/. Apply a diff to a directory or file
+-- | /O(n)/. Apply a diff to a file. Throws an exception if the
+--   application fails.
 applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
 applyToFile (Filediff _ _ change) filepath = do
     case change of
@@ -176,16 +177,8 @@ applyToFile (Filediff _ _ change) filepath = do
             -- need, here (because of the write right after)
             file <- TIO.readFile filepath 
             let result = applySequenceDiff seqdiff . T.lines $ file
-            TIO.writeFile filepath (safeInit . T.unlines $ result) -- init for trailing \n
+            TIO.writeFile filepath (safeInit . T.unlines $ result) -- `init` for trailing \n
             return result
 
         safeInit :: T.Text -> T.Text
         safeInit x = if T.null x then x else T.init x
-
--- | `True` upon success; `False` upon failure
-applyToDirectory :: Diff -> FilePath -> IO ()
-applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
-    where
-        apply :: Filediff -> IO [Line]
-        apply diff@(Filediff base compare _)
-            = applyToFile diff (filepath </> base)

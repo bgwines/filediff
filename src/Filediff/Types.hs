@@ -31,10 +31,9 @@ import Data.MemoCombinators (Memo, wrap)
 import Data.MemoCombinators.Class (MemoTable, table, memoize)
 
 -- | The basic data type for a difference between two files. The
---   `FilePath` is the "base" file in the base-comp comparison, and
---   is the file to which the patch will be applied. Deletions: a list
---   of indices at which to remove elements. Additions: each line to add
---   comes with the index at which it will eventually reside.
+--   "base" `FilePath` is the file chose state is being compared against,
+--   and the "comp" `FilePath` is the file being compared (the "later"
+--   of the two).
 data Filediff = Filediff {
     base :: FilePath,
     comp :: FilePath,
@@ -98,9 +97,10 @@ instance Monoid Filediff where
                 comp = comp fd2,
                 change = change fd1 `mappend` change fd2 }
 
--- | A data type for differences between directories
+-- | A data type for differences between directories. `filediffs`
+--   stores 'Filediffs` whose filepaths are relative to directories being
+--   diffed.
 data Diff = Diff {
-    -- relative to directories being diffed
     filediffs :: [Filediff]
 } deriving (Show, Generic)
 
@@ -161,8 +161,8 @@ instance Monoid Diff where
                 = filter (uncurry f)
                 $ (\x y -> (x,y)) <$> a <*> b
 
--- | Data type for a line
+-- | Data type for a line.
 type Line = T.Text
 
--- | Basic error type
+-- | Basic error type.
 type Error = String

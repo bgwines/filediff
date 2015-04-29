@@ -114,8 +114,8 @@ instance (Eq a, MemoTable a) => Monoid (SeqDiff a) where
 
 -- | returns (to delete, to add)
 --  
---       > diffSequences "abcdefg" "wabxyze"
---       SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--       > λ diffSequences "abcdefg" "wabxyze"
+--       > SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
 diffSequences :: forall a. (Eq a, MemoTable a) => [a] -> [a] -> SeqDiff a
 diffSequences a b = SeqDiff
     (nonSubsequenceIndices common a)
@@ -124,27 +124,26 @@ diffSequences a b = SeqDiff
         common :: [a]
         common = longestCommonSubsequence a b
 
-        -- | λ add
-        -- | [(0,"w"),(3,"x"),(4,"y")]
-        -- | λ common
-        -- | ["a","b","e"]
+        -- | > λ add
+        --   > [(0,"w"),(3,"x"),(4,"y")]
+        --   > λ common
+        --   > ["a","b","e"]
         getProgressiveIndicesToAdd :: (Eq a) => [a] -> [a] -> [(Int, a)]
         getProgressiveIndicesToAdd sub super =
             map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
 
--- |     > diffSequences "abcdefg" "wabxyze"
---       SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
---  
---       > applySequenceDiff it "abcdefg"
---       "wabxyze"
+-- |     > λ diffSequences "abcdefg" "wabxyze"
+--       > SeqDiff {dels = [2,3,5,6], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--       > λ applySequenceDiff it "abcdefg"
+--       > "wabxyze"
 applySequenceDiff :: forall a. (Eq a) => SeqDiff a -> [a] -> [a]
 applySequenceDiff (SeqDiff dels adds)
     = insertAtProgressiveIndices adds . removeAtIndices dels
     where
         -- | Best explained by example:
         -- |
-        -- |     > insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
-        -- |     "daebf"
+        -- |     > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
+        -- |     > "daebf"
         insertAtProgressiveIndices :: [(Int, a)] -> [a] -> [a]
         insertAtProgressiveIndices = insertAtProgressiveIndices' 0
 
@@ -190,8 +189,8 @@ longestCommonSubsequence
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
 --   get the index at which each element of `sub` appears. E.g.
 --  
---       > subsequenceIndices "abe" "abcdefg"
---       [0,1,4]
+--       > λ subsequenceIndices "abe" "abcdefg"
+--       > [0,1,4]
 subsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
 subsequenceIndices [] _ = []
 subsequenceIndices _ [] = error "`sub` was not a subsequence of `super`"
@@ -203,8 +202,8 @@ subsequenceIndices sub@(a:sub') super@(b:super') =
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
 --   get the indices at which elements of `sub` do *not* appear. E.g.
 --  
---       > nonSubsequenceIndices "abe" "abcdefg"
---       [2,3,5,6]
+--       > λ nonSubsequenceIndices "abe" "abcdefg"
+--       > [2,3,5,6]
 nonSubsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
 nonSubsequenceIndices sub super =
     [0..(length super - 1)] \\ (subsequenceIndices sub super)
