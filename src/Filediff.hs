@@ -182,3 +182,12 @@ applyToFile (Filediff _ _ change) filepath = do
 
         safeInit :: T.Text -> T.Text
         safeInit x = if T.null x then x else T.init x
+
+-- | Applies a `Diff` to a directory. Throws an exception if the
+--   application fails.
+applyToDirectory :: Diff -> FilePath -> IO ()
+applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
+    where
+        apply :: Filediff -> IO [Line]
+        apply diff@(Filediff base compare _)
+            = applyToFile diff (filepath </> base)
