@@ -19,7 +19,7 @@ import qualified Data.ByteString.Char8 as ByteString
 import Filediff.Types
 import Filediff.Sequence
 
--- | Prints a 'SeqDiff Line'. Prints with colors and some formatting.
+-- | Prints a 'SeqDiff' 'Line'. Prints with colors and some formatting.
 printSeqdiff :: SeqDiff Line -> IO ()
 printSeqdiff (SeqDiff dels adds) = do
     let deletedLines = zip (repeat "del") (zip dels (repeat ""))
@@ -53,12 +53,12 @@ printFilediff (Filediff base comp change) = do
         Mod _ -> "(file modification)";
         Del _ -> "(file deletion)"; }
     let diffDescription :: ByteString = "diff a/" <> (ByteString.pack base) <> " b/" <> (ByteString.pack comp) <> " " <> diffType
-    putChunkLn $ chunk diffDescription & fore brightWhite & bold
+    putChunkLn $ chunk diffDescription & bold
 
     let delLine :: ByteString = "--- a/" <> (ByteString.pack base)
     let addLine :: ByteString = "+++ b/" <> (ByteString.pack comp)
-    putChunkLn $ chunk delLine & fore brightWhite & bold
-    putChunkLn $ chunk addLine & fore brightWhite & bold
+    putChunkLn $ chunk delLine & bold
+    putChunkLn $ chunk addLine & bold
 
     printSeqdiff $ seqDiff change
     putChunkLn $ chunk ("" :: ByteString)

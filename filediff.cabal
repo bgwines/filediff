@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                filediff
-version:             0.1.0.7
+version:             0.1.0.8
 synopsis:            Diffing and patching module
 description:         `filediff` is a Haskell library for creating diffs, and applying diffs to files and directories.
 homepage:            https://github.com/bgwines/filediff
@@ -32,3 +32,4 @@ test-suite test-filediff
     main-is:    Tests/test-filediff.hs
     build-depends: base >=4.7 && <4.8, tasty, tasty-hunit, mtl, time, directory, either, transformers, filediff, text
     default-language:    Haskell2010
+    GHC-Options:      -fhpc -hpcdir dist/hpc/filediff-1.0
