@@ -5,7 +5,7 @@
 module Filediff.Printing
 ( printDiff
 , printFilediff
-, printSeqdiff
+, printListdiff
 ) where
 
 import Rainbow
@@ -17,13 +17,12 @@ import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Char8 as ByteString
 
 import Filediff.Types
-import Filediff.Sequence
 
--- | Prints a 'SeqDiff' 'Line'. Prints with colors and some formatting.
-printSeqdiff :: SeqDiff Line -> IO ()
-printSeqdiff (SeqDiff dels adds) = do
-    let deletedLines = zip (repeat "del") (zip dels (repeat ""))
-    let addedLines   = zip (repeat "add") (adds)
+-- | Prints a 'ListDiff' 'Line'. Prints with colors and some formatting.
+printListdiff :: ListDiff Line -> IO ()
+printListdiff (ListDiff dels adds) = do
+    let deletedLines = zip (repeat "del") dels
+    let addedLines   = zip (repeat "add") adds
 
     let interleaved = ZL.merge_by mergeCmpFn deletedLines addedLines
     mapM_ printLine interleaved
@@ -37,7 +36,7 @@ printSeqdiff (SeqDiff dels adds) = do
             where
                 line' :: Line
                 line' = if t == "del"
-                    then T.pack $ "- <Line " ++ (show i) ++ ">"
+                    then (T.pack "- ") <> line
                     else (T.pack "+ ") <> line
 
                 color :: Chunk a -> Chunk a
@@ -60,7 +59,7 @@ printFilediff (Filediff base comp change) = do
     putChunkLn $ chunk delLine & bold
     putChunkLn $ chunk addLine & bold
 
-    printSeqdiff $ seqDiff change
+    printListdiff $ listDiff change
     putChunkLn $ chunk ("" :: ByteString)
 
 -- | Prints a 'Diff'. Prints with colors and some formatting.

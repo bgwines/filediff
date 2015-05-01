@@ -10,16 +10,15 @@ module Filediff.Stats
 ) where
 
 import Filediff.Types
-import Filediff.Sequence
 
 -- | Number of files added, modified, or deleted in a diff.
 numFilesAffected :: Diff -> Int
 numFilesAffected = length . filediffs
 
-numMatchingLines :: (FileChange -> Bool) -> (SeqDiff Line -> [b]) -> Diff -> Int
+numMatchingLines :: (FileChange -> Bool) -> (ListDiff Line -> [b]) -> Diff -> Int
 numMatchingLines isMatchingChange matchingLines
     = sum
-    . map (length . matchingLines . seqDiff)
+    . map (length . matchingLines . listDiff)
     . filter isMatchingChange
     . map change
     . filediffs

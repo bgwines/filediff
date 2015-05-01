@@ -1,12 +1,14 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Data types used by `Filediff`
 module Filediff.Types
 ( Filediff(..)
 , Diff(..)
 , FileChange(..)
-, seqDiff
+, ListDiff(..)
+, listDiff
 , isDel
 , isMod
 , isAdd
@@ -17,18 +19,118 @@ module Filediff.Types
 import GHC.Generics
 
 import Data.Default
+import Data.Function (on)
 
 import qualified Data.Text as T
 
-import Data.List (intersect, sortBy)
+import Data.Maybe
+
+import Zora.List (merge, merge_by)
+import Data.List (find, intersect, intersectBy, sortBy, (\\))
 
 import Data.Monoid
 import Control.Applicative
 
-import Filediff.Sequence (SeqDiff(..))
-
 import Data.MemoCombinators (Memo, wrap)
 import Data.MemoCombinators.Class (MemoTable, table, memoize)
+
+-- | Diff between two lists. `dels` represents the indices
+--   at which to delete, and `adds` represents the indices and
+--   contents to add.
+data ListDiff a = ListDiff
+    { dels :: [(Int, a)]
+    , adds :: [(Int, a)] }
+    deriving (Show, Eq, Generic)
+
+instance Default (ListDiff a) where
+    def :: ListDiff a
+    def = ListDiff [] []
+
+instance (Eq a, Ord a, MemoTable a) => Monoid (ListDiff a) where
+    mempty :: ListDiff a
+    mempty = ListDiff [] []
+
+    -- may fail
+    mappend :: ListDiff a -> ListDiff a -> ListDiff a
+    mappend
+        (ListDiff abDels abAdds)
+        (ListDiff bcDels bcAdds)
+        = ListDiff acDels acAdds
+        where
+            acDels :: [(Int, a)]
+            acDels = merge abDels bDelsFromA
+
+            -- indices (in `a`) of elements that survive (a -> b)
+            -- , but not (b -> c)
+            -- TODO: `intersectBy` almost certainly ain't linear.
+            -- Should probably write it here since we know these
+            -- are sorted.
+            bDelsFromA :: [(Int, a)]
+            bDelsFromA
+                = catMaybes
+                . map f
+                $ bcDels
+                where
+                    f :: (Int, a) -> Maybe (Int, a)
+                    f (bi, ch) =
+                        case match of
+                            Just (ai, _) -> Just (ai, ch)
+                            Nothing -> Nothing
+                        where
+                            match :: Maybe (Int, Int)
+                            match = find (\(sai, sbi) -> sbi == bi) survivingAIndicesInB
+
+
+                    --(\(_, bi) (_, biDeleted) -> bi == biDeleted)
+                    --(zip survivingAIndicesInB) --:: [(Int, Int!)]
+                    --(bcDels) 
+
+            -- indices (in b) of elements that survive (a -> b)
+            -- (in format [(in a, in b)])
+            survivingAIndicesInB :: [(Int, Int)]
+            survivingAIndicesInB = map (\(b,a) -> (a,b)) $ indicesAfterAdds 0 survivingAIndices (map fst abAdds)
+
+            -- will not be all if the last elem of `a` is
+            -- not deleted, but doesn't make a difference
+            survivingAIndices :: [Int]
+            survivingAIndices = if null abDels
+                then []
+                else [0..(maximum abDels')] \\ abDels'
+                where
+                    abDels' :: [Int]
+                    abDels' = map fst abDels
+
+            -- TODO: WEIRD. not using `forall a.` but still needs to be `b`?
+            -- Given elements and their indices as [(Int, b)] as the only
+            -- elements to survive the transformation, and [Int] as the
+            -- indices added in the transformation, calculate the eventual
+            -- positions of the elements.
+            indicesAfterAdds :: Int -> [b] -> [Int] -> [(Int, b)]
+            indicesAfterAdds _ [] _ = []
+            indicesAfterAdds i elems@(x:xs) [] = (:) (i, x) $ indicesAfterAdds (i + 1) xs []
+            indicesAfterAdds i elems@(x:xs) adds@(a:as) =
+                if i < a
+                    then (:) (i, x) $ indicesAfterAdds (i + 1) xs (a:as)
+                    else indicesAfterAdds (i + 1) (x:xs) as
+
+            acAdds :: [(Int, a)]
+            acAdds = merge_by (\(i,_) (j,_) -> i `compare` j) bcAdds cAddsFromA
+
+            cAddsFromA :: [(Int, a)]
+            cAddsFromA = indicesAfterAdds 0 (map snd survivingABAdds) (map fst bcAdds)
+
+            -- adds in (a -> b) that survive (b -> c)
+            survivingABAdds :: [(Int, a)]
+            survivingABAdds = survivingABAdds' abAdds bcDels
+
+            survivingABAdds' :: [(Int, a)] -> [(Int, a)] -> [(Int, a)]
+            survivingABAdds' [] _ = []
+            survivingABAdds' adds [] = adds
+            survivingABAdds' (a:adds) (d:dels) =
+                case (fst a) `compare` (fst d) of
+                    LT -> (:) a $ survivingABAdds' adds (d:dels)
+                    EQ -> survivingABAdds' adds dels
+                    GT -> survivingABAdds' (a:adds) dels
 
 -- | The basic data type for a difference between two files. The
 --   "base" `FilePath` is the file chose state is being compared against,
@@ -42,15 +144,15 @@ data Filediff = Filediff {
 
 -- | The types and sets of changes possible between two files.
 data FileChange
-    = Del (SeqDiff Line)
-    | Mod (SeqDiff Line)
-    | Add (SeqDiff Line) deriving (Eq, Show, Generic)
+    = Del (ListDiff Line)
+    | Mod (ListDiff Line)
+    | Add (ListDiff Line) deriving (Eq, Show, Generic)
 
--- | Gets the 'SeqDiff' stored in a 'FileChange'.
-seqDiff :: FileChange -> SeqDiff Line
-seqDiff (Del diff) = diff
-seqDiff (Mod diff) = diff
-seqDiff (Add diff) = diff
+-- | Gets the 'ListDiff' stored in a 'FileChange'.
+listDiff :: FileChange -> ListDiff Line
+listDiff (Del diff) = diff
+listDiff (Mod diff) = diff
+listDiff (Add diff) = diff
 
 -- | Whether a 'FileChange' is a deletion or not.
 isDel :: FileChange -> Bool

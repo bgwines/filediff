@@ -3,11 +3,17 @@
 
 -- | The module exposing the functionality of this package
 module Filediff
-( -- * basic operations
-  diffFiles
+( -- * lists
+  diffLists
+, applyListDiff
+
+  -- * files
+, diffFiles
+, applyToFile
+
+  -- * directories
 , diffDirectories
 , diffDirectoriesWithIgnoredSubdirs
-, applyToFile
 , applyToDirectory
 ) where
 
@@ -16,6 +22,9 @@ import qualified System.Directory as D
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+
+import Data.MemoCombinators.Class (MemoTable, table)
+import qualified Data.MemoCombinators as Memo
 
 -- function imports
 
@@ -32,7 +41,6 @@ import Control.Monad.IO.Class (liftIO)
 -- Filediff imports
 
 import Filediff.Types
-import Filediff.Sequence (SeqDiff(..), diffSequences, applySequenceDiff)
 import Filediff.Utils
     ( (</>)
     , (<.>)
@@ -78,7 +86,7 @@ diffFiles a b = do
             return Filediff
                 { base = a
                 , comp = b
-                , change = Add $ diffSequences aLines bLines }
+                , change = Add $ diffLists aLines bLines }
 
         delCase :: IO Filediff
         delCase = do
@@ -87,7 +95,7 @@ diffFiles a b = do
             return Filediff
                 { base = a
                 , comp = b
-                , change = Del $ diffSequences aLines bLines }
+                , change = Del $ diffLists aLines bLines }
 
         modCase :: IO Filediff
         modCase = do
@@ -96,7 +104,7 @@ diffFiles a b = do
             return Filediff
                 { base = a
                 , comp = b
-                , change = Mod $ diffSequences aLines bLines }
+                , change = Mod $ diffLists aLines bLines }
 
 -- | Compute the difference between the two directories (more
 --   specifically, the minimal number of changes to make to transform the
@@ -162,21 +170,21 @@ applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
 applyToFile (Filediff _ _ change) filepath = do
     case change of
         Del _       -> delCase
-        Mod seqdiff -> modCase seqdiff
-        Add seqdiff -> addCase seqdiff
+        Mod listdiff -> modCase listdiff
+        Add listdiff -> addCase listdiff
     where
         delCase :: IO [Line]
         delCase = D.removeFile filepath >> return []
 
-        addCase :: SeqDiff Line -> IO [Line]
-        addCase seqdiff = createFileWithContents filepath "" >> modCase seqdiff
+        addCase :: ListDiff Line -> IO [Line]
+        addCase listDiff = createFileWithContents filepath "" >> modCase listDiff
 
-        modCase :: SeqDiff Line -> IO [Line]
-        modCase seqdiff = do
+        modCase :: ListDiff Line -> IO [Line]
+        modCase listDiff = do
             -- Data.Text.IO.readFile is strict, which is what we
             -- need, here (because of the write right after)
             file <- TIO.readFile filepath 
-            let result = applySequenceDiff seqdiff . T.lines $ file
+            let result = applyListDiff listDiff . T.lines $ file
             TIO.writeFile filepath (safeInit . T.unlines $ result) -- `init` for trailing \n
             return result
 
@@ -191,3 +199,120 @@ applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
         apply :: Filediff -> IO [Line]
         apply diff@(Filediff base compare _)
             = applyToFile diff (filepath </> base)
+
+-- | Computes the minimal number of additions and deletions needed to
+--   transform the first parameter into the second.
+--
+--       > λ diffLists "abcdefg" "wabxyze"
+--       > ListDiff {dels = [(2,'c'),(3,'d'),(5,'f'),(6,'g')], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+diffLists :: forall a. (Eq a, MemoTable a) => [a] -> [a] -> ListDiff a
+diffLists a b = ListDiff
+    (map (\i -> (i, a !! i)) $ nonSubsequenceIndices common a)
+    (getProgressiveIndicesToAdd common b)
+    where
+        common :: [a]
+        common = longestCommonSubsequence a b
+
+        -- | > λ add
+        --   > [(0,"w"),(3,"x"),(4,"y")]
+        --   > λ common
+        --   > ["a","b","e"]
+        getProgressiveIndicesToAdd :: (Eq a) => [a] -> [a] -> [(Int, a)]
+        getProgressiveIndicesToAdd sub super =
+            map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
+
+-- |     > λ diffLists "abcdefg" "wabxyze"
+--       > ListDiff {dels = [(2,'c'),(3,'d'),(5,'f'),(6,'g')], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--       > λ applyListDiff it "abcdefg"
+--       > "wabxyze"
+--
+-- Throws an exception if the diff can't be applied.
+applyListDiff :: forall a. (Eq a) => ListDiff a -> [a] -> [a]
+applyListDiff (ListDiff dels adds)
+    = insertAtProgressiveIndices adds . removeAtIndices dels
+    where
+        -- | Best explained by example:
+        -- |
+        -- |     > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
+        -- |     > "daebf"
+        insertAtProgressiveIndices :: [(Int, a)] -> [a] -> [a]
+        insertAtProgressiveIndices = insertAtProgressiveIndices' 0
+
+        insertAtProgressiveIndices' :: Int -> [(Int, a)] -> [a] -> [a]
+        insertAtProgressiveIndices' _ [] dest = dest
+        insertAtProgressiveIndices' curr src@((i,s):src') [] =
+            s : insertAtProgressiveIndices' (succ curr) src' []
+        insertAtProgressiveIndices' curr src@((i,s):src') dest@(d:dest') =
+            if i == curr
+                then s : insertAtProgressiveIndices' (succ curr) src' dest
+                else d : insertAtProgressiveIndices' (succ curr) src dest'
+
+-- all functions below are not exposed
+
+-- optimization: hash lines
+-- | Compute the longest common (potentially noncontiguous) subsequence
+--   between two sequences. Element type is fixed because memoization
+--   requires a static type.
+longestCommonSubsequence :: forall a. (MemoTable a, Eq a) =>
+                                [a] -> [a] -> [a]
+longestCommonSubsequence
+    = Memo.memo2
+        (Memo.list table)
+        (Memo.list table)
+        longestCommonSubsequence'
+    where
+        longestCommonSubsequence' :: [a] -> [a] -> [a]
+        longestCommonSubsequence' [] _ = []
+        longestCommonSubsequence' _ [] = []
+        longestCommonSubsequence' (x:xs) (y:ys) =
+            if x == y
+                then x : (longestCommonSubsequence xs ys) -- WLOG
+                else if (length caseX) > (length caseY)
+                    then caseX
+                    else caseY
+            where
+                caseX :: [a]
+                caseX = longestCommonSubsequence xs (y:ys)
+
+                caseY :: [a]
+                caseY = longestCommonSubsequence (x:xs) ys
+
+-- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
+--   get the index at which each element of `sub` appears. E.g.
+--  
+--       > λ subsequenceIndices "abe" "abcdefg"
+--       > [0,1,4]
+subsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
+subsequenceIndices [] _ = []
+subsequenceIndices _ [] = error "`sub` was not a subsequence of `super`"
+subsequenceIndices sub@(a:sub') super@(b:super') =
+    if a == b
+        then 0 : map succ (subsequenceIndices sub' super')
+        else     map succ (subsequenceIndices sub super')
+
+-- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
+--   get the indices at which elements of `sub` do *not* appear. E.g.
+--  
+--       > λ nonSubsequenceIndices "abe" "abcdefg"
+--       > [2,3,5,6]
+nonSubsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
+nonSubsequenceIndices sub super =
+    [0..(length super - 1)] \\ (subsequenceIndices sub super)
+
+-- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
+--   and indices must all exist. Throws an exception if the provided
+--   list doesn't have those elements at those indices.
+removeAtIndices :: forall a. (Eq a) => [(Int, a)] -> [a] -> [a]
+removeAtIndices dels list = if not matches
+    then error $ "Fatal: can't apply this diff to this list."
+    else removeAtIndices' 0 (map fst dels) list
+    where
+        matches :: Bool
+        matches = all (\(i, ch) -> (list !! i) == ch) dels
+
+        removeAtIndices' :: Int -> [Int] -> [a] -> [a]
+        removeAtIndices' _ [] xs = xs
+        removeAtIndices' curr (i:is) (x:xs) =
+            if curr == i
+                then     removeAtIndices' (succ curr) is xs
+                else x : removeAtIndices' (succ curr) (i:is) xs

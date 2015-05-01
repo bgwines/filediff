@@ -34,8 +34,6 @@ import Control.Monad.IO.Class (liftIO)
 
 import Data.Either.Combinators (isLeft, fromLeft)
 
-import Filediff.Sequence (SeqDiff(..))
-import qualified Filediff.Sequence as FSeq
 import qualified Filediff as F
 import qualified Filediff.Stats as F
 import qualified Filediff.Types as F
@@ -148,19 +146,19 @@ createFileWithContents filepath contents = do
 
 -- sequence tests
 
-testSequenceDiffEdgeCase1 :: Assertion
-testSequenceDiffEdgeCase1 = do
-    return $ FSeq.diffSequences "" "wabxyze"
+testListDiffEdgeCase1 :: Assertion
+testListDiffEdgeCase1 = do
+    return $ F.diffLists "" "wabxyze"
     True @?= True -- no exception: considered success for this test
 
-testSequenceDiffEdgeCase2 :: Assertion
-testSequenceDiffEdgeCase2 = do
-    return $ FSeq.diffSequences "wabxyze" ""
+testListDiffEdgeCase2 :: Assertion
+testListDiffEdgeCase2 = do
+    return $ F.diffLists "wabxyze" ""
     True @?= True -- no exception: considered success for this test
 
-testSequenceDiffEdgeCase3 :: Assertion
-testSequenceDiffEdgeCase3 = do
-    return $ FSeq.diffSequences "" ""
+testListDiffEdgeCase3 :: Assertion
+testListDiffEdgeCase3 = do
+    return $ F.diffLists "" ""
     True @?= True -- no exception: considered success for this test
 
 -- file diff tests
@@ -170,7 +168,7 @@ testFileDiff = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ SeqDiff [2,3,5,6] [(0, T.pack "w"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z")])
+    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ F.ListDiff [(2, T.pack "c"),(3, T.pack "d"),(5, T.pack "f"),(6, T.pack "g")] [(0, T.pack "w"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z")])
     (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testFileDiffEmptyFiles :: Assertion
@@ -186,7 +184,7 @@ testFileDiffEmptyBase = do
     createFileWithContents "BASE" ""
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
+    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ F.ListDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
     (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testFileDiffEmptyComp :: Assertion
@@ -194,21 +192,21 @@ testFileDiffEmptyComp = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
     createFileWithContents "COMP" ""
 
-    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ SeqDiff [0,1,2,3,4,5,6] [])
+    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Mod $ F.ListDiff [(0, T.pack "a"),(1, T.pack "b"),(2, T.pack "c"),(3, T.pack "d"),(4, T.pack "e"),(5, T.pack "f"),(6, T.pack "g")] [])
     (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff1 :: Assertion
 testNonexistentFileDiff1 = do
     createFileWithContents "BASE" "a\nb\nc\nd\ne\nf\ng"
 
-    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Del $ SeqDiff [0,1,2,3,4,5,6] [])
+    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Del $ F.ListDiff [(0, T.pack "a"),(1, T.pack "b"),(2, T.pack "c"),(3, T.pack "d"),(4, T.pack "e"),(5, T.pack "f"),(6, T.pack "g")] [])
     (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff2 :: Assertion
 testNonexistentFileDiff2 = do
     createFileWithContents "COMP" "w\na\nb\nx\ny\nz\ne"
 
-    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Add $ SeqDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
+    let expectedFilediff = F.Filediff "BASE" "COMP" (F.Add $ F.ListDiff [] [(0, T.pack "w"),(1, T.pack "a"),(2, T.pack "b"),(3, T.pack "x"),(4, T.pack "y"),(5, T.pack "z"),(6, T.pack "e")])
     (F.diffFiles "BASE" "COMP") >>= (@=?) expectedFilediff
 
 testNonexistentFileDiff3 :: Assertion
@@ -248,15 +246,15 @@ testDirDiff = do
             [ F.Filediff
                 { F.base = "common/x"
                 , F.comp = "common/x"
-                , F.change = F.Mod $ SeqDiff [1] [(1, T.pack "b")] }
+                , F.change = F.Mod $ F.ListDiff [(1, T.pack "a")] [(1, T.pack "b")] }
             , F.Filediff
                     { F.base = "aonly/afile"
                     , F.comp = "aonly/afile"
-                    , F.change = F.Del $ SeqDiff [0,1,2] [] }
+                    , F.change = F.Del $ F.ListDiff [(0, T.pack "a"),(1, T.pack "a"),(2, T.pack "a")] [] }
             , F.Filediff
                 { F.base = "bonly/bfile"
                 , F.comp = "bonly/bfile"
-                , F.change = F.Add $ SeqDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")] } ]
+                , F.change = F.Add $ F.ListDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")] } ]
         }
     actualDiff @?= expectedDiff
 
@@ -291,15 +289,15 @@ testDirDiffIgnoreFiles = do
             [ F.Filediff
                 { F.base = "common/x"
                 , F.comp = "common/x"
-                , F.change = F.Mod $ SeqDiff [1] [(1, T.pack "b")] }
+                , F.change = F.Mod $ F.ListDiff [(1, T.pack "a")] [(1, T.pack "b")] }
             , F.Filediff
                     { F.base = "aonly/afile"
                     , F.comp = "aonly/afile"
-                    , F.change = F.Del $ SeqDiff [0,1,2] [] }
+                    , F.change = F.Del $ F.ListDiff [(0, T.pack "a"),(1, T.pack "a"),(2, T.pack "a")] [] }
             , F.Filediff
                 { F.base = "bonly/bfile"
                 , F.comp = "bonly/bfile"
-                , F.change = F.Add $ SeqDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")] } ]
+                , F.change = F.Add $ F.ListDiff [] [(0, T.pack "b"),(1, T.pack "b"),(2, T.pack "b")] } ]
         }
     actualDiff @?= expectedDiff
 
@@ -336,36 +334,36 @@ testIdentityDirDiff = do
 
 -- composition tests
 
-testSequenceDiffComposition :: Assertion
-testSequenceDiffComposition = do
+testListDiffComposition :: Assertion
+testListDiffComposition = do
     let a = "abcdefg"
     let b = "wabxyze"
     let c = "#x##ye"
 
-    let ab = FSeq.diffSequences a b
-    let bc = FSeq.diffSequences b c
-    let ac = FSeq.diffSequences a c
+    let ab = F.diffLists a b
+    let bc = F.diffLists b c
+    let ac = F.diffLists a c
 
     ab `mappend` bc @?= ac
 
-testSequenceDiffCompositionEdgeCase1 :: Assertion
-testSequenceDiffCompositionEdgeCase1 = do
+testListDiffCompositionEdgeCase1 :: Assertion
+testListDiffCompositionEdgeCase1 = do
     let a = ""
     let b = "bbb"
     let c = ""
 
-    let ab = FSeq.diffSequences a b
-    let bc = FSeq.diffSequences b c
-    let ac = FSeq.diffSequences a c
+    let ab = F.diffLists a b
+    let bc = F.diffLists b c
+    let ac = F.diffLists a c
 
     ab `mappend` bc @?= ac
 
-testSequenceDiffCompositionEdgeCase2 :: Assertion
-testSequenceDiffCompositionEdgeCase2 = do
-    let ab = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(0,"a")]}
-    let bc = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(1,"b")]}
+testListDiffCompositionEdgeCase2 :: Assertion
+testListDiffCompositionEdgeCase2 = do
+    let ab = F.ListDiff {F.dels = [], F.adds = [(0,"a")]}
+    let bc = F.ListDiff {F.dels = [], F.adds = [(1,"b")]}
 
-    let ac = FSeq.SeqDiff {FSeq.dels = [], FSeq.adds = [(0,"a"),(1,"b")]}
+    let ac = F.ListDiff {F.dels = [], F.adds = [(0,"a"),(1,"b")]}
 
     ab `mappend` bc @?= ac
 
@@ -412,13 +410,13 @@ testDirectoryDiffComposition = do
 
 -- sequence apply tests
 
-testSequenceApplyEdgeCase1 :: Assertion
-testSequenceApplyEdgeCase1 = do
+testListApplyEdgeCase1 :: Assertion
+testListApplyEdgeCase1 = do
     let base = ""
     let comp = "abcde"
 
-    let seqdiff = FSeq.diffSequences base comp
-    let applied = FSeq.applySequenceDiff seqdiff base
+    let listdiff = F.diffLists base comp
+    let applied = F.applyListDiff listdiff base
     applied @?= comp
 
 -- file apply tests
@@ -564,7 +562,7 @@ relativePathExpectedDiff = F.Diff {
         [ F.Filediff
             { F.base = "a"
             , F.comp = "a"
-            , F.change = F.Mod $ SeqDiff [0] [(0, T.pack "b")] } ]
+            , F.change = F.Mod $ F.ListDiff [(0, T.pack "a")] [(0, T.pack "b")] } ]
     }
 
 testRelativePathness :: Assertion
@@ -698,28 +696,28 @@ tests = testGroup "unit tests"
     -- alg
     -- edge cases
     , testCase
-        "Testing sequence diffing (edge case 1)"
-        (testSequenceDiffEdgeCase1)
+        "Testing list diffing (edge case 1)"
+        (testListDiffEdgeCase1)
     , testCase
-        "Testing sequence diffing (edge case 2)"
-        (testSequenceDiffEdgeCase2)
+        "Testing list diffing (edge case 2)"
+        (testListDiffEdgeCase2)
     , testCase
-        "Testing sequence diffing (edge case 3)"
-        (testSequenceDiffEdgeCase3)
+        "Testing list diffing (edge case 3)"
+        (testListDiffEdgeCase3)
     , testCase
         "Testing sequence patching (edge case 1)"
-        (testSequenceApplyEdgeCase1)
+        (testListApplyEdgeCase1)
 
     --     composition
     , testCase
-        "Testing sequence diffing composition"
-        (testSequenceDiffComposition)
+        "Testing list diffing composition"
+        (testListDiffComposition)
     , testCase
-        "Testing sequence diffing composition (edge case 1)"
-        (testSequenceDiffCompositionEdgeCase1)
+        "Testing list diffing composition (edge case 1)"
+        (testListDiffCompositionEdgeCase1)
     , testCase
-        "Testing sequence diffing composition (edge case 2)"
-        (testSequenceDiffCompositionEdgeCase2)
+        "Testing list diffing composition (edge case 2)"
+        (testListDiffCompositionEdgeCase2)
     , testCase
         "Testing file diffing composition"
         (runTest testFileDiffComposition)
