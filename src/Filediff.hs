@@ -17,6 +17,10 @@ module Filediff
 , applyToDirectory
 ) where
 
+import Control.Concurrent (forkIO)
+import Control.Concurrent.Thread as Thread (Result(..))
+import Control.Concurrent.Thread.Group as ThreadGroup (new, forkIO, wait)
+
 import qualified System.IO as IO
 import qualified System.Directory as D
 
@@ -194,11 +198,19 @@ applyToFile (Filediff _ _ change) filepath = do
 -- | Applies a `Diff` to a directory. Throws an exception if the
 --   application fails.
 applyToDirectory :: Diff -> FilePath -> IO ()
-applyToDirectory (Diff filediffs) filepath = mapM_ apply filediffs
+applyToDirectory (Diff filediffs) filepath
+    = void $ mapMParallelWaitForAll (void . apply) filediffs
     where
         apply :: Filediff -> IO [Line]
         apply diff@(Filediff base compare _)
             = applyToFile diff (filepath </> base)
+
+mapMParallelWaitForAll :: (a -> IO b) -> [a] -> IO [Thread.Result b]
+mapMParallelWaitForAll f list = do
+    group <- ThreadGroup.new
+    ioResults <- mapM (fmap snd . ThreadGroup.forkIO group . f) list
+    ThreadGroup.wait group
+    sequence ioResults
 
 -- | Computes the minimal number of additions and deletions needed to
 --   transform the first parameter into the second.
