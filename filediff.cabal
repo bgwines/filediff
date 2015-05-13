@@ -32,4 +32,4 @@ test-suite test-filediff
     main-is:    Tests/test-filediff.hs
     build-depends: base >=4.7 && <4.8, tasty, tasty-hunit, mtl, time, directory, either, transformers, filediff, text
     default-language:    Haskell2010
-    --GHC-Options:      -fhpc -hpcdir dist/hpc/filediff-1.0
+    GHC-Options:      -fhpc -hpcdir dist/hpc/mix/test-filediff
