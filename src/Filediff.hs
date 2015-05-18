@@ -223,7 +223,7 @@ diffLists a b = ListDiff
     (getProgressiveIndicesToAdd common b)
     where
         common :: [a]
-        common = longestCommonSubsequence a b
+        common = longestCommonSubsequenceWrapper a b
 
         -- | > λ add
         --   > [(0,"w"),(3,"x"),(4,"y")]
@@ -260,6 +260,31 @@ applyListDiff (ListDiff dels adds)
                 else d : insertAtProgressiveIndices' (succ curr) src dest'
 
 -- all functions below are not exposed
+
+-- don't hit the memotable if not necessary
+longestCommonSubsequenceWrapper :: forall a. (MemoTable a, Eq a) => [a] -> [a] -> [a]
+longestCommonSubsequenceWrapper xs ys =
+    if xs == ys
+        then xs -- (WLOG) don't want to return xs ++ xs
+        else commonPrefix ++ longestCommonSubsequence xs' ys' ++ commonSuffix
+    where
+        commonPrefix :: [a]
+        commonPrefix = getCommonPrefix xs ys
+
+        commonSuffix :: [a]
+        commonSuffix = reverse (getCommonPrefix (reverse xs) (reverse ys))
+
+        getCommonPrefix :: [a] -> [a] -> [a]
+        getCommonPrefix as bs = map fst . takeWhile (uncurry (==)) $ zip as bs
+
+        getMiddle :: [a] -> [a]
+        getMiddle elems = take (length elems - length commonPrefix - length commonSuffix) . drop (length commonPrefix) $ elems
+
+        xs' :: [a]
+        xs' = getMiddle xs
+
+        ys' :: [a]
+        ys' = getMiddle ys
 
 -- optimization: hash lines
 -- | Compute the longest common (potentially noncontiguous) subsequence
