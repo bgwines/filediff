@@ -273,8 +273,12 @@ longestCommonSubsequenceWrapper xs ys =
         commonPrefix :: [a]
         commonPrefix = getCommonPrefix xs ys
 
+        -- drop (length commonPrefix) to prevent the "abc" vs. "abc*abc" case
         commonSuffix :: [a]
-        commonSuffix = reverse (getCommonPrefix (reverse xs) (reverse ys))
+        commonSuffix = reverse
+            (getCommonPrefix
+                (reverse (drop (length commonPrefix) xs))
+                (reverse (drop (length commonPrefix) ys)))
 
         getCommonPrefix :: [a] -> [a] -> [a]
         getCommonPrefix as bs = map fst . takeWhile (uncurry (==)) $ zip as bs

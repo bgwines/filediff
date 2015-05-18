@@ -616,7 +616,17 @@ testDiffStats = do
     F.numAddedLines diff @?= 1 + 3
     F.numDeletedLines diff @?= 1 + 2
 
--- tests
+testSameListConcatenated :: Assertion
+testSameListConcatenated = do
+    let diff = F.diffLists "abc" "abcabc"
+
+    diff @?= F.ListDiff {F.dels = [], F.adds = [(3,'a'),(4,'b'),(5,'c')]}
+
+testSameListConcatenatedWithIntermediate :: Assertion
+testSameListConcatenatedWithIntermediate = do
+    let diff = F.diffLists "abc" "abc*abc"
+
+    diff @?= F.ListDiff {F.dels = [], F.adds = [(3, '*'), (4,'a'),(5,'b'),(6,'c')]}
 
 tests :: TestTree
 tests = testGroup "unit tests"
@@ -735,6 +745,12 @@ tests = testGroup "unit tests"
     , testCase
         "Testing diff statistics"
         (runTest testDiffStats)
+    , testCase
+        "Testing same list concatenated with itself (case 1)"
+        testSameListConcatenated
+    , testCase
+        "Testing same list concatenated with itself (case 2)"
+        testSameListConcatenatedWithIntermediate
     ]
 
 main :: IO ()
