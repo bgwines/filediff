@@ -262,11 +262,13 @@ applyListDiff (ListDiff dels adds)
 -- all functions below are not exposed
 
 -- don't hit the memotable if not necessary
-longestCommonSubsequenceWrapper :: forall a. (MemoTable a, Eq a) => [a] -> [a] -> [a]
+longestCommonSubsequenceWrapper :: forall a. (Eq a) => [a] -> [a] -> [a]
 longestCommonSubsequenceWrapper xs ys =
     if xs == ys
         then xs -- (WLOG) don't want to return xs ++ xs
-        else commonPrefix ++ longestCommonSubsequence xs' ys' ++ commonSuffix
+        else commonPrefix
+            ++ longestCommonSubsequence (getMiddle xs) (getMiddle ys)
+            ++ commonSuffix
     where
         commonPrefix :: [a]
         commonPrefix = getCommonPrefix xs ys
@@ -280,39 +282,37 @@ longestCommonSubsequenceWrapper xs ys =
         getMiddle :: [a] -> [a]
         getMiddle elems = take (length elems - length commonPrefix - length commonSuffix) . drop (length commonPrefix) $ elems
 
-        xs' :: [a]
-        xs' = getMiddle xs
-
-        ys' :: [a]
-        ys' = getMiddle ys
+-- | Compute the longest common (potentially noncontiguous) subsequence
+--   between two sequences. Element type is fixed because memoization
+--   requires a static type.
+longestCommonSubsequence :: forall a. (Eq a) => [a] -> [a] -> [a]
+longestCommonSubsequence xs ys = longestCommonSubsequence' xs ys 0 0
 
 -- optimization: hash lines
 -- | Compute the longest common (potentially noncontiguous) subsequence
 --   between two sequences. Element type is fixed because memoization
 --   requires a static type.
-longestCommonSubsequence :: forall a. (MemoTable a, Eq a) =>
-                                [a] -> [a] -> [a]
-longestCommonSubsequence
-    = Memo.memo2
-        (Memo.list table)
-        (Memo.list table)
-        longestCommonSubsequence'
+longestCommonSubsequence' :: forall a. (Eq a) =>
+                                [a] -> [a] -> Int -> Int -> [a]
+longestCommonSubsequence' xs ys i j
+    = (Memo.memo2 Memo.integral Memo.integral
+            (longestCommonSubsequence'' xs ys)) i j
     where
-        longestCommonSubsequence' :: [a] -> [a] -> [a]
-        longestCommonSubsequence' [] _ = []
-        longestCommonSubsequence' _ [] = []
-        longestCommonSubsequence' (x:xs) (y:ys) =
+        longestCommonSubsequence'' :: [a] -> [a] -> Int -> Int -> [a]
+        longestCommonSubsequence'' [] _ _ _ = []
+        longestCommonSubsequence'' _ [] _ _ = []
+        longestCommonSubsequence'' (x:xs) (y:ys) i j =
             if x == y
-                then x : (longestCommonSubsequence xs ys) -- WLOG
+                then x : (longestCommonSubsequence' xs ys (i + 1) (j + 1)) -- WLOG
                 else if (length caseX) > (length caseY)
                     then caseX
                     else caseY
             where
                 caseX :: [a]
-                caseX = longestCommonSubsequence xs (y:ys)
+                caseX = longestCommonSubsequence' xs (y:ys) (i+1) j
 
                 caseY :: [a]
-                caseY = longestCommonSubsequence (x:xs) ys
+                caseY = longestCommonSubsequence' (x:xs) ys i (j+1)
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
 --   get the index at which each element of `sub` appears. E.g.
