@@ -31,9 +31,6 @@ import Data.List (find, intersect, intersectBy, sortBy, (\\))
 import Data.Monoid
 import Control.Applicative
 
-import Data.MemoCombinators (Memo, wrap)
-import Data.MemoCombinators.Class (MemoTable, table, memoize)
-
 -- | Diff between two lists. `dels` represents the indices
 --   at which to delete, and `adds` represents the indices and
 --   contents to add.
@@ -46,7 +43,7 @@ instance Default (ListDiff a) where
     def :: ListDiff a
     def = ListDiff [] []
 
-instance (Eq a, Ord a, MemoTable a) => Monoid (ListDiff a) where
+instance (Eq a, Ord a) => Monoid (ListDiff a) where
     mempty :: ListDiff a
     mempty = ListDiff [] []
 
@@ -219,10 +216,6 @@ instance Eq Diff where
 instance Default Diff where
     def :: Diff
     def = Diff []
-
-instance MemoTable T.Text where
-    table :: Memo T.Text
-    table = wrap T.pack T.unpack table
 
 instance Monoid Diff where
     mempty :: Diff
