@@ -417,7 +417,7 @@ testListApplyEdgeCase1 = do
 
     let listdiff = F.diffLists base comp
     let applied = F.applyListDiff listdiff base
-    applied @?= comp
+    applied @?= Right comp
 
 -- file apply tests
 
@@ -430,8 +430,8 @@ testFileApply = do
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 testFileApplyEdgeCase1 :: Assertion
@@ -443,8 +443,8 @@ testFileApplyEdgeCase1 = do
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 testFileApplyEdgeCase2 :: Assertion
@@ -456,8 +456,8 @@ testFileApplyEdgeCase2 = do
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 -- tests deletion of a file
@@ -468,7 +468,7 @@ testFileApplyEdgeCase3 = do
     createFileWithContents "BASE" baseContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
 
     exists <- D.doesFileExist "BASE"
     assertBool "File should be deleted." (not exists)
@@ -482,8 +482,8 @@ testFileApplyEdgeCase4 = do
 
     fileDiff <- F.diffFiles "BASE" "COMP"
 
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 testFileApplyEdgeCase5 :: Assertion
@@ -495,8 +495,8 @@ testFileApplyEdgeCase5 = do
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
 testFileApplyEdgeCase6 :: Assertion
@@ -508,18 +508,96 @@ testFileApplyEdgeCase6 = do
     createFileWithContents "COMP" compContents
 
     fileDiff <- F.diffFiles "BASE" "COMP"
-    applied <- F.applyToFile fileDiff "BASE"
-    applied @?= (T.lines . T.pack $ compContents)
+    applied <- runEitherT (F.applyFileDiff fileDiff "BASE")
+    applied @?= Right (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
-testCanApplyListDiffCanApply :: Assertion
-testCanApplyListDiffCanApply = do
+testListDiffApplyFailureDeletionCase :: Assertion
+testListDiffApplyFailureDeletionCase = do
     let base = "abcdefg"
+    let faultyBase = "ab*defg"
     let comp = "wabxyze"
 
     let listDiff = F.diffLists base comp
-    let canApply = F.canApplyListDiff listDiff base
-    assertBool "Should be able to apply diff." canApply
+    let eitherResult = F.applyListDiff listDiff faultyBase
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires removing an element where the diff calls for a different element residing at that index)."
+
+testListDiffApplyFailureAdditionCase :: Assertion
+testListDiffApplyFailureAdditionCase = do
+    let base = "abcdefg"
+    let faultyBase = "abcde"
+    let comp = "wabxyzefgq"
+
+    let listDiff = F.diffLists base comp
+    let eitherResult = F.applyListDiff listDiff faultyBase
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires inserting at an index larger than the length of the list to which to apply the diff)."
+    return ()
+
+testFileDiffApplyFailureDeletionCase :: Assertion
+testFileDiffApplyFailureDeletionCase = do
+    let baseContents = "abcdefg"
+    let faultyBaseContents = "ab*defg"
+    let compContents = "wabxyze"
+
+    D.createDirectory "a"
+    D.createDirectory "b"
+    createFileWithContents "a/BASE" baseContents
+    createFileWithContents "a/FAULTY-BASE" faultyBaseContents
+    createFileWithContents "b/COMP" compContents
+
+    fileDiff <- F.diffFiles "a/BASE" "b/COMP"
+    eitherResult <- runEitherT (F.applyFileDiff fileDiff "a/FAULTY-BASE")
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires removing an element where the diff calls for a different element residing at that index)."
+
+testFileDiffApplyFailureAdditionCase :: Assertion
+testFileDiffApplyFailureAdditionCase = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let faultyBaseContents = "a\nb\nc\nd\ne"
+    let compContents = "w\na\nb\nx\ny\nz\ne\nf\ng\nq"
+
+    D.createDirectory "a"
+    D.createDirectory "b"
+    createFileWithContents "a/BASE" baseContents
+    createFileWithContents "a/FAULTY-BASE" faultyBaseContents
+    createFileWithContents "b/COMP" compContents
+
+    fileDiff <- F.diffFiles "a/BASE" "b/COMP"
+    eitherResult <- runEitherT (F.applyFileDiff fileDiff "a/FAULTY-BASE")
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires inserting at an index larger than the length of the list to which to apply the diff)."
+
+testDirectoryDiffApplyFailureDeletionCase :: Assertion
+testDirectoryDiffApplyFailureDeletionCase = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let faultyBaseContents = "a\nb\n*\nd\ne\nf\ng"
+    let compContents = "wabxyze"
+
+    D.createDirectory "a"
+    D.createDirectory "faulty-a"
+    D.createDirectory "b"
+    createFileWithContents "a/file" baseContents
+    createFileWithContents "faulty-a/file" faultyBaseContents
+    createFileWithContents "b/file" compContents
+
+    dirDiff <- F.diffDirectories "a" "b"
+    eitherResult <- runEitherT (F.applyDirectoryDiff dirDiff "faulty-a")
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires removing an element where the diff calls for a different element residing at that index)."
+
+testDirectoryDiffApplyFailureAdditionCase :: Assertion
+testDirectoryDiffApplyFailureAdditionCase = do
+    let baseContents = "a\nb\nc\nd\ne\nf\ng"
+    let faultyBaseContents = "a\nb\nc\nd\ne"
+    let compContents = "w\na\nb\nx\ny\nz\ne\nf\ng\nq"
+
+    D.createDirectory "a"
+    D.createDirectory "faulty-a"
+    D.createDirectory "b"
+    createFileWithContents "a/file" baseContents
+    createFileWithContents "faulty-a/file" faultyBaseContents
+    createFileWithContents "b/file" compContents
+
+    dirDiff <- F.diffDirectories "a" "b"
+    eitherResult <- runEitherT (F.applyDirectoryDiff dirDiff "faulty-a")
+    eitherResult @?= Left "Fatal: couldn't apply list diff (application requires inserting at an index larger than the length of the list to which to apply the diff)."
 
 -- directory apply tests
 
@@ -541,7 +619,7 @@ testDirApply = do
     createFileWithContents "b/bonly/bfile" "b\nb\nb"
 
     diff <- F.diffDirectories "a" "b"
-    F.applyToDirectory diff "a"
+    runEitherT (F.applyDirectoryDiff diff "a")
 
     -- removing files and removing directories
     -- also addition of bfile to `a` adds \n
@@ -763,8 +841,23 @@ tests = testGroup "unit tests"
 
     -- can apply?
     , testCase
-        "Testing `can apply` for list diffs"
-        testCanApplyListDiffCanApply
+        "Testing application failure for list diffs (case 1)"
+        (runTest testListDiffApplyFailureDeletionCase)
+    , testCase
+        "Testing application failure for list diffs (case 2)"
+        (runTest testListDiffApplyFailureAdditionCase)
+    , testCase
+        "Testing application failure for file diffs (case 1)"
+        (runTest testFileDiffApplyFailureDeletionCase)
+    , testCase
+        "Testing application failure for file diffs (case 2)"
+        (runTest testFileDiffApplyFailureAdditionCase)
+    , testCase
+        "Testing application failure for directory diffs (case 1)"
+        (runTest testDirectoryDiffApplyFailureDeletionCase)
+    , testCase
+        "Testing application failure for directory diffs (case 2)"
+        (runTest testDirectoryDiffApplyFailureAdditionCase)
     ]
 
 main :: IO ()

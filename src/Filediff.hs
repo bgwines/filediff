@@ -6,23 +6,22 @@ module Filediff
 ( -- * lists
   diffLists
 , applyListDiff
-, canApplyListDiff
 
   -- * files
 , diffFiles
-, applyToFile
+, applyFileDiff
 
   -- * directories
 , diffDirectories
 , diffDirectoriesWithIgnoredSubdirs
-, applyToDirectory
+, applyDirectoryDiff
 ) where
 
 import Debug.Trace
 import qualified Data.HashMap as HMap
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.Thread as Thread (Result(..))
+import Control.Concurrent.Thread as Thread (Result(..), result)
 import Control.Concurrent.Thread.Group as ThreadGroup (new, forkIO, wait)
 
 import qualified System.IO as IO
@@ -72,7 +71,7 @@ import Filediff.Utils
 --   file residing at the location specified by the first
 --   parameter into the second). Throws an exception if either or both of
 --   the parameters point to a directory, not a file.
---  
+--
 --   Files are allowed to not exist at either or both of the parameters.
 diffFiles :: FilePath -> FilePath -> IO Filediff
 diffFiles a b = do
@@ -173,43 +172,51 @@ diffDirectoriesWithIgnoredSubdirs a' b' aToIgnore bToIgnore = do
         shouldIgnore :: [FilePath] -> FilePath -> Bool
         shouldIgnore toIgnore filepath = any (flip isPrefix $ filepath) toIgnore
 
--- | /O(n)/. Apply a diff to a file. Throws an exception if the
---   application fails.
-applyToFile :: Filediff -> FilePath -> IO [Line]--EitherT Error IO ()
-applyToFile (Filediff _ _ change) filepath = do
+-- | /O(n)/. Apply a diff to a file. Returns the fail state if
+-- application fails. For more on how diff application can fail,
+-- see 'applyListDiff'.
+applyFileDiff :: Filediff -> FilePath -> EitherT Error IO [Line]
+applyFileDiff (Filediff _ _ change) filepath = do
     case change of
         Del _       -> delCase
         Mod listdiff -> modCase listdiff
         Add listdiff -> addCase listdiff
     where
-        delCase :: IO [Line]
-        delCase = D.removeFile filepath >> return []
+        delCase :: EitherT Error IO [Line]
+        delCase = liftIO (D.removeFile filepath) >> right []
 
-        addCase :: ListDiff Line -> IO [Line]
-        addCase listDiff = createFileWithContents filepath "" >> modCase listDiff
+        addCase :: ListDiff Line -> EitherT Error IO [Line]
+        addCase listDiff = liftIO (createFileWithContents filepath "") >> modCase listDiff
 
-        modCase :: ListDiff Line -> IO [Line]
+        modCase :: ListDiff Line -> EitherT Error IO [Line]
         modCase listDiff = do
             -- Data.Text.IO.readFile is strict, which is what we
             -- need, here (because of the write right after)
-            file <- TIO.readFile filepath 
-            let result = applyListDiff listDiff . T.lines $ file
-            TIO.writeFile filepath (safeInit . T.unlines $ result) -- `init` for trailing \n
-            return result
+            file <- liftIO (TIO.readFile filepath)
+            result <- hoistEither (applyListDiff listDiff . T.lines $ file)
+            liftIO (TIO.writeFile filepath (safeInit . T.unlines $ result))-- `init` for trailing \n
+            right result
 
         safeInit :: T.Text -> T.Text
         safeInit x = if T.null x then x else T.init x
 
--- | Applies a `Diff` to a directory. Throws an exception if the
---   application fails.
-applyToDirectory :: Diff -> FilePath -> IO ()
-applyToDirectory (Diff filediffs) filepath
-    = void $ mapMParallelWaitForAll (void . apply) filediffs
+-- | Applies a `Diff` to a directory. Returns the fail state if
+-- any file application fails, but because of the parallelism in the
+-- implementation, all file diffs will be attempted to be applied, so
+-- if this fails, your directory will be left in an inconsistent state.
+-- For more on how diff application can fail, see 'applyListDiff'.
+applyDirectoryDiff :: Diff -> FilePath -> EitherT Error IO [[Line]]
+applyDirectoryDiff (Diff filediffs) filepath
+    = EitherT
+    . fmap sequence
+    $ mapMParallelWaitForAll (runEitherT . apply) filediffs >>= mapM Thread.result
     where
-        apply :: Filediff -> IO [Line]
+        apply :: Filediff -> EitherT Error IO [Line]
         apply diff@(Filediff base compare _)
-            = applyToFile diff (filepath </> base)
+            = applyFileDiff diff (filepath </> base)
 
+-- | forks the given 'IO' action for each element in the given list,
+-- but waits for all to finish before returning.
 mapMParallelWaitForAll :: (a -> IO b) -> [a] -> IO [Thread.Result b]
 mapMParallelWaitForAll f list = do
     group <- ThreadGroup.new
@@ -238,62 +245,58 @@ diffLists a b = ListDiff
         getProgressiveIndicesToAdd sub super =
             map (\i -> (i, super !! i)) $ nonSubsequenceIndices sub super
 
--- |     > λ diffLists "abcdefg" "wabxyze"
+-- | Applies a list diff. For example,
+--
 --       > ListDiff {dels = [(2,'c'),(3,'d'),(5,'f'),(6,'g')], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
 --       > λ applyListDiff it "abcdefg"
---       > "wabxyze"
+--       > Right "wabxyze"
 --
--- Throws an exception if the diff can't be applied.
-applyListDiff :: forall a. (Eq a) => ListDiff a -> [a] -> [a]
-applyListDiff (ListDiff dels adds)
-    = insertAtProgressiveIndices adds . removeAtIndices dels
-    where
-        -- | Best explained by example:
-        -- |
-        -- |     > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
-        -- |     > "daebf"
-        insertAtProgressiveIndices :: [(Int, a)] -> [a] -> [a]
-        insertAtProgressiveIndices = insertAtProgressiveIndices' 0
-
-        insertAtProgressiveIndices' :: Int -> [(Int, a)] -> [a] -> [a]
-        insertAtProgressiveIndices' _ [] dest = dest
-        insertAtProgressiveIndices' curr src@((i,s):src') [] =
-            s : insertAtProgressiveIndices' (succ curr) src' []
-        insertAtProgressiveIndices' curr src@((i,s):src') dest@(d:dest') =
-            if i == curr
-                then s : insertAtProgressiveIndices' (succ curr) src' dest
-                else d : insertAtProgressiveIndices' (succ curr) src dest'
-
--- |     > λ diffLists "abcdefg" "wabxyze"
---       > ListDiff {dels = [(2,'c'),(3,'d'),(5,'f'),(6,'g')], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
---       > λ applyListDiffSafe it "abcdefg"
---       > Just "wabxyze"
-applyListDiffSafe :: forall a. (Eq a) => ListDiff a -> [a] -> Either String [a]
-applyListDiffSafe (ListDiff dels adds) list =
-    removeAtIndicesSafe dels list >>= insertAtProgressiveIndicesSafe adds
+-- Returns a fail state if the diff cannot be applied. This can happen
+-- for two reasons: first, the diff calls for a deletion at an index
+-- but the element at that index doesn't match the element believed by
+-- the to be diff at that index. Second, it can happen if the diff calls
+-- for an element to be added at an index too large for the given input.
+-- Here are respective examples of inputs that would trigger this case:
+--
+--     > let base = "abcdefg"
+--     > let faultyBase = "ab*defg"
+--     > let comp = "wabxyze"
+--     > let listDiff = F.diffLists base comp
+--     > F.applyListDiff listDiff faultyBase -- fails
+--
+-- and
+--
+--     > let base = "abcdefg"
+--     > let faultyBase = "abcde"
+--     > let comp = "wabxyzefgq"
+--     > let listDiff = F.diffLists base comp
+--     > F.applyListDiff listDiff faultyBase -- fails
+applyListDiff :: forall a. (Eq a) => ListDiff a -> [a] -> Either Error [a]
+applyListDiff l@(ListDiff dels adds) list =
+    removeAtIndices dels list >>= insertAtProgressiveIndices adds
 
 -- | Best explained by example:
--- |
--- |     > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
--- |     > Just "daebf"
-insertAtProgressiveIndicesSafe :: [(Int, a)] -> [a] -> Either String [a]
-insertAtProgressiveIndicesSafe = insertAtProgressiveIndicesSafe' 0
+--
+--       > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
+--       > Just "daebf"
+insertAtProgressiveIndices :: [(Int, a)] -> [a] -> Either Error [a]
+insertAtProgressiveIndices = insertAtProgressiveIndices' 0
 
-insertAtProgressiveIndicesSafe' :: Int -> [(Int, a)] -> [a] -> Either String [a]
-insertAtProgressiveIndicesSafe' _ [] dest = Right dest
-insertAtProgressiveIndicesSafe' curr src@((i,s):src') dest =
+insertAtProgressiveIndices' :: Int -> [(Int, a)] -> [a] -> Either Error [a]
+insertAtProgressiveIndices' _ [] dest = Right dest
+insertAtProgressiveIndices' curr src@((i,s):src') dest =
     if i == curr
-        then (:) s <$> insertAtProgressiveIndicesSafe' (succ curr) src' dest
+        then (:) s <$> insertAtProgressiveIndices' (succ curr) src' dest
         else case dest of
-            (d:dest') -> (:) d <$> insertAtProgressiveIndicesSafe' (succ curr) src dest'
+            (d:dest') -> (:) d <$> insertAtProgressiveIndices' (succ curr) src dest'
             [] -> Left "Fatal: couldn't apply list diff (application requires inserting at an index larger than the length of the list to which to apply the diff)."
-
-canApplyListDiff :: forall a. (Eq a) => ListDiff a -> [a] -> Bool
-canApplyListDiff diff = isRight . applyListDiffSafe diff
 
 -- all functions below are not exposed
 
 -- don't hit the memotable if not necessary
+-- | A wrapper around `longestCommonSubsequence`. It gives a bit of a
+-- performance boost; it avoids hitting the memo table to an extent
+-- (exactly how much depends on the arguments).
 longestCommonSubsequenceWrapper :: forall a. (Eq a) => [a] -> [a] -> [a]
 longestCommonSubsequenceWrapper xs ys =
     if xs == ys
@@ -369,7 +372,7 @@ longestCommonSubsequence xs ys = longestCommonSubsequence' 0 0
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
 --   get the index at which each element of `sub` appears. E.g.
---  
+--
 --       > λ subsequenceIndices "abe" "abcdefg"
 --       > [0,1,4]
 subsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
@@ -382,7 +385,7 @@ subsequenceIndices sub@(a:sub') super@(b:super') =
 
 -- | When `sub` is a (not necessarily contiguous) subsequence of `super`,
 --   get the indices at which elements of `sub` do *not* appear. E.g.
---  
+--
 --       > λ nonSubsequenceIndices "abe" "abcdefg"
 --       > [2,3,5,6]
 nonSubsequenceIndices :: (Eq a) => [a] -> [a] -> [Int]
@@ -390,33 +393,15 @@ nonSubsequenceIndices sub super =
     [0..(length super - 1)] \\ (subsequenceIndices sub super)
 
 -- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
---   and indices must all exist. Throws an exception if the provided
---   list doesn't have those elements at those indices.
-removeAtIndices :: forall a. (Eq a) => [(Int, a)] -> [a] -> [a]
+--   and indices must all exist.
+removeAtIndices :: forall a. (Eq a) => [(Int, a)] -> [a] -> Either Error [a]
 removeAtIndices dels list = if not matches
-    then error $ "Fatal: can't apply this diff to this list."
-    else removeAtIndices' 0 (map fst dels) list
-    where
-        matches :: Bool
-        matches = all (\(i, ch) -> (list !! i) == ch) dels
-
-        removeAtIndices' :: Int -> [Int] -> [a] -> [a]
-        removeAtIndices' _ [] xs = xs
-        removeAtIndices' curr (i:is) (x:xs) =
-            if curr == i
-                then     removeAtIndices' (succ curr) is xs
-                else x : removeAtIndices' (succ curr) (i:is) xs
-
--- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
---   and indices must all exist. Throws an exception if the provided
---   list doesn't have those elements at those indices.
-removeAtIndicesSafe :: forall a. (Eq a) => [(Int, a)] -> [a] -> Either String [a]
-removeAtIndicesSafe dels list = if not matches
     then Left "Fatal: couldn't apply list diff (application requires removing an element where the diff calls for a different element residing at that index)."
     else Right (removeAtIndices' 0 (map fst dels) list)
     where
         matches :: Bool
-        matches = all (\(i, ch) -> (list !! i) == ch) dels
+        matches = all (< length list) (map fst dels)
+            && all (\(i, ch) -> (list !! i) == ch) dels
 
         removeAtIndices' :: Int -> [Int] -> [a] -> [a]
         removeAtIndices' _ [] xs = xs
