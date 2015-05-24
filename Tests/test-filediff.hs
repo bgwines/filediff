@@ -512,6 +512,15 @@ testFileApplyEdgeCase6 = do
     applied @?= (T.lines . T.pack $ compContents)
     join $ (liftM2 (@?=)) (readFile "BASE") (readFile "COMP")
 
+testCanApplyListDiffCanApply :: Assertion
+testCanApplyListDiffCanApply = do
+    let base = "abcdefg"
+    let comp = "wabxyze"
+
+    let listDiff = F.diffLists base comp
+    let canApply = F.canApplyListDiff listDiff base
+    assertBool "Should be able to apply diff." canApply
+
 -- directory apply tests
 
 testDirApply :: Assertion
@@ -751,6 +760,11 @@ tests = testGroup "unit tests"
     , testCase
         "Testing same list concatenated with itself (case 2)"
         testSameListConcatenatedWithIntermediate
+
+    -- can apply?
+    , testCase
+        "Testing `can apply` for list diffs"
+        testCanApplyListDiffCanApply
     ]
 
 main :: IO ()

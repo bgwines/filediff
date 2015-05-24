@@ -6,6 +6,7 @@ module Filediff
 ( -- * lists
   diffLists
 , applyListDiff
+, canApplyListDiff
 
   -- * files
 , diffFiles
@@ -30,8 +31,9 @@ import qualified System.Directory as D
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
-import Data.MemoCombinators.Class (MemoTable, table)
 import qualified Data.MemoCombinators as Memo
+
+import Data.Either.Combinators
 
 -- function imports
 
@@ -262,6 +264,33 @@ applyListDiff (ListDiff dels adds)
                 then s : insertAtProgressiveIndices' (succ curr) src' dest
                 else d : insertAtProgressiveIndices' (succ curr) src dest'
 
+-- |     > λ diffLists "abcdefg" "wabxyze"
+--       > ListDiff {dels = [(2,'c'),(3,'d'),(5,'f'),(6,'g')], adds = [(0,'w'),(3,'x'),(4,'y'),(5,'z')]}
+--       > λ applyListDiffSafe it "abcdefg"
+--       > Just "wabxyze"
+applyListDiffSafe :: forall a. (Eq a) => ListDiff a -> [a] -> Either String [a]
+applyListDiffSafe (ListDiff dels adds) list =
+    removeAtIndicesSafe dels list >>= insertAtProgressiveIndicesSafe adds
+
+-- | Best explained by example:
+-- |
+-- |     > λ insertAtProgressiveIndices [(1,'a'),(3,'b')] "def"
+-- |     > Just "daebf"
+insertAtProgressiveIndicesSafe :: [(Int, a)] -> [a] -> Either String [a]
+insertAtProgressiveIndicesSafe = insertAtProgressiveIndicesSafe' 0
+
+insertAtProgressiveIndicesSafe' :: Int -> [(Int, a)] -> [a] -> Either String [a]
+insertAtProgressiveIndicesSafe' _ [] dest = Right dest
+insertAtProgressiveIndicesSafe' curr src@((i,s):src') dest =
+    if i == curr
+        then (:) s <$> insertAtProgressiveIndicesSafe' (succ curr) src' dest
+        else case dest of
+            (d:dest') -> (:) d <$> insertAtProgressiveIndicesSafe' (succ curr) src dest'
+            [] -> Left "Fatal: couldn't apply list diff (application requires inserting at an index larger than the length of the list to which to apply the diff)."
+
+canApplyListDiff :: forall a. (Eq a) => ListDiff a -> [a] -> Bool
+canApplyListDiff diff = isRight . applyListDiffSafe diff
+
 -- all functions below are not exposed
 
 -- don't hit the memotable if not necessary
@@ -367,6 +396,24 @@ removeAtIndices :: forall a. (Eq a) => [(Int, a)] -> [a] -> [a]
 removeAtIndices dels list = if not matches
     then error $ "Fatal: can't apply this diff to this list."
     else removeAtIndices' 0 (map fst dels) list
+    where
+        matches :: Bool
+        matches = all (\(i, ch) -> (list !! i) == ch) dels
+
+        removeAtIndices' :: Int -> [Int] -> [a] -> [a]
+        removeAtIndices' _ [] xs = xs
+        removeAtIndices' curr (i:is) (x:xs) =
+            if curr == i
+                then     removeAtIndices' (succ curr) is xs
+                else x : removeAtIndices' (succ curr) (i:is) xs
+
+-- | /O(n)/. `indices` parameter *must* be sorted in increasing order,
+--   and indices must all exist. Throws an exception if the provided
+--   list doesn't have those elements at those indices.
+removeAtIndicesSafe :: forall a. (Eq a) => [(Int, a)] -> [a] -> Either String [a]
+removeAtIndicesSafe dels list = if not matches
+    then Left "Fatal: couldn't apply list diff (application requires removing an element where the diff calls for a different element residing at that index)."
+    else Right (removeAtIndices' 0 (map fst dels) list)
     where
         matches :: Bool
         matches = all (\(i, ch) -> (list !! i) == ch) dels
