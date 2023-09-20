@@ -15,6 +15,9 @@ import Zora.List as ZL (merge_by)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Char8 as ByteString
+import qualified Data.ByteString.Lazy.Internal as ByteString
+import Data.ByteString.Char8 (ByteString)
+import Data.Function ((&))
 
 import Filediff.Types
 
@@ -32,14 +35,14 @@ printListdiff (ListDiff dels adds) = do
 
         printLine :: (String, (Int, Line)) -> IO ()
         printLine (t, (i, line)) = do
-            putChunkLn $ chunk (T.encodeUtf8 line') & color
+            putChunkLn $ chunk line' & color
             where
                 line' :: Line
                 line' = if t == "del"
                     then (T.pack "- ") <> line
                     else (T.pack "+ ") <> line
 
-                color :: Chunk a -> Chunk a
+                color :: Chunk -> Chunk
                 color = if t == "del"
                     then fore red
                     else fore green
@@ -47,20 +50,20 @@ printListdiff (ListDiff dels adds) = do
 -- | Prints a 'Filediff'. Prints with colors and some formatting.
 printFilediff :: Filediff -> IO ()
 printFilediff (Filediff base comp change) = do
-    let diffType :: ByteString = case change of {
+    let diffType :: T.Text = case change of {
         Add _ -> "(file addition)";
         Mod _ -> "(file modification)";
         Del _ -> "(file deletion)"; }
-    let diffDescription :: ByteString = "diff a/" <> (ByteString.pack base) <> " b/" <> (ByteString.pack comp) <> " " <> diffType
+    let diffDescription :: T.Text = "diff a/" <> (T.pack base) <> " b/" <> (T.pack comp) <> " " <> diffType
     putChunkLn $ chunk diffDescription & bold
 
-    let delLine :: ByteString = "--- a/" <> (ByteString.pack base)
-    let addLine :: ByteString = "+++ b/" <> (ByteString.pack comp)
+    let delLine :: T.Text = "--- a/" <> (T.pack base)
+    let addLine :: T.Text = "+++ b/" <> (T.pack comp)
     putChunkLn $ chunk delLine & bold
     putChunkLn $ chunk addLine & bold
 
     printListdiff $ listDiff change
-    putChunkLn $ chunk ("" :: ByteString)
+    putChunkLn $ chunk ("" :: T.Text)
 
 -- | Prints a 'Diff'. Prints with colors and some formatting.
 printDiff :: Diff -> IO ()
