@@ -43,6 +43,9 @@ instance Default (ListDiff a) where
     def :: ListDiff a
     def = ListDiff [] []
 
+instance (Eq a, Ord a) => Semigroup (ListDiff a) where
+  (<>) = mappend
+
 instance (Eq a, Ord a) => Monoid (ListDiff a) where
     mempty :: ListDiff a
     mempty = ListDiff [] []
@@ -167,6 +170,9 @@ isAdd (Del _) = False
 isAdd (Mod _) = False
 isAdd (Add _) = True
 
+instance Semigroup FileChange where
+  (<>) = mappend
+
 instance Monoid FileChange where
     mempty :: FileChange
     mempty = Mod mempty -- no changes (no add / del); identity diff
@@ -181,6 +187,9 @@ instance Monoid FileChange where
     mappend (Add _    ) (Del _    ) = mempty -- will be filtered out during directory composition. Yes; this isn't ideal, but it's at least clean.
     mappend (Add diff1) (Mod diff2) = Add $ diff1 `mappend` diff2
     mappend (Add _    ) (Add _    ) = error "add ++ add"
+
+instance Semigroup Filediff where
+  (<>) = mappend
 
 -- TODO: is this mathematically correct?
 instance Monoid Filediff where
@@ -216,6 +225,9 @@ instance Eq Diff where
 instance Default Diff where
     def :: Diff
     def = Diff []
+
+instance Semigroup Diff where
+  (<>) = mappend
 
 instance Monoid Diff where
     mempty :: Diff
